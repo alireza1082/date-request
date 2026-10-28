@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { activities } from "../../data/activities";
-import { getShareMessage, shareActivity } from "./share-activity";
+import { getShareMessage, shareActivity, sharePostcard } from "./share-activity";
 
 const sampleActivity = activities[0]!;
 
@@ -50,5 +50,21 @@ describe("sharing a date idea", () => {
 
     await expect(shareActivity(sampleActivity)).resolves.toBe("cancelled");
     expect(writeText).not.toHaveBeenCalled();
+  });
+
+  it("shares the postcard image when the browser supports file sharing", async () => {
+    const file = new File(["png"], "date-wheel.png", { type: "image/png" });
+    const share = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { share, canShare: () => true, clipboard: { writeText: vi.fn() } });
+    await expect(sharePostcard(sampleActivity, file)).resolves.toEqual({ outcome: "shared", usedImage: true });
+    expect(share).toHaveBeenCalledWith(expect.objectContaining({ files: [file] }));
+  });
+
+  it("falls back to the existing Persian text share when image sharing is unsupported", async () => {
+    const file = new File(["png"], "date-wheel.png", { type: "image/png" });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    await expect(sharePostcard(sampleActivity, file)).resolves.toEqual({ outcome: "copied", usedImage: false });
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining(sampleActivity.title));
   });
 });

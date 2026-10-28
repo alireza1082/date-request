@@ -18,7 +18,7 @@ function contrastRatio(first: string, second: string): number {
 describe("date activity data", () => {
   it("has unique identifiers and concise wheel labels", () => {
     expect(new Set(activities.map(({ id }) => id)).size).toBe(activities.length);
-    expect(activities.every(({ title, wheelLabel, description }) => title && wheelLabel && description)).toBe(true);
+    expect(activities.every(({ title, wheelLabel, description, suggestion }) => title && wheelLabel && description && suggestion)).toBe(true);
   });
 
   it("keeps every segment label at or above 4.5:1 contrast", () => {

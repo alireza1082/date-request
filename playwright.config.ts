@@ -17,6 +17,8 @@ export default defineConfig({
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"], ...chromeLaunchOptions } },
+    { name: "webkit", use: { ...devices["Desktop Safari"] } },
+    { name: "webkit-mobile", use: { ...devices["iPhone 13"] } },
   ],
   webServer: {
     command: "pnpm dev",

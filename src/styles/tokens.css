@@ -4,6 +4,10 @@
   --paper-light: #fffaf2;
   --ink: #493b3c;
   --berry: #995d68;
+  --berry-deep: #77454f;
+  --brass: #b18468;
+  --paper-shadow: #ead9c7;
+  --rose-wash: #f1e2d9;
   --muted: #9a877f;
   --focus: #9a5967;
   --space-1: 0.25rem;
@@ -25,5 +29,6 @@
   --motion-medium: 350ms;
   --motion-slow: 700ms;
   --motion-reveal: 540ms;
+  --motion-card: 420ms;
   /* Responsive layout breakpoints: compact <= 360px, mobile <= 680px, tablet <= 900px. */
 }

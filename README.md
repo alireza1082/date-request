@@ -1,16 +1,14 @@
 # چرخِ قرار · Date Wheel
 
-A small, shareable Persian date picker built around a hand-crafted spinning wheel. It is a static React application with no backend, database, account, or runtime API dependency.
+A tiny Persian interactive surprise for choosing a date together. It is a static React application with no backend, database, account, or runtime API dependency.
 
-**Version:** 1.1.0
+**Version:** 1.2.0 · The Little Surprise Edition
 
 ## Design notes
 
-The visual direction pairs warm paper and pomegranate tones with a brass-edged wheel, restrained ornament, and a calm Persian headline. This release tightens the wheel's spin into anticipation, momentum, and a gentle landing; settled labels turn upright again, and the result sheet reveals its copy in a quiet sequence. The ten short labels keep the wheel readable on small screens. Motion stays on transforms and opacity, and the wheel uses an immediate landing for people who request reduced motion.
+The visual direction treats the app as a small illustrated postcard: warm paper, pomegranate ink, quiet brass details, and locally drawn activity artwork. Three small mood choices reshape the wheel without changing its unbiased selection engine. A personalized invitation can carry a short title, greeting, and mood in a compact URL fragment; a recipient sees the greeting before the wheel. Result cards can be saved as a 1080 × 1350 PNG or shared as an image when the browser supports file sharing.
 
-For this polish pass, I reviewed Dribbble's [Mobile UI - spin wheel](https://dribbble.com/shots/24216175-Mobile-UI-spin-wheel), the [Awwwards Magic Bottle feature](https://www.awwwards.com/sites/magic-bottle) and its [studio case study](https://www.nk.studio/work/magic-bottle/), plus [Mobbin's public reference-library overview](https://mobbin.com/). The object-as-gift story and invitation to explore informed the wheel's tactile framing and the reveal's paced entrance. Behance's Fortune's Wheel case appeared in search, but its direct page returned 403, so I did not use it for visual analysis. The Persian composition remains original.
-
-References: [Dribbble date app work](https://dribbble.com/shots/22984521-Dating-Mobile-iOS-App), [Dribbble couples wheel search](https://dribbble.com/search/app-wheel), [Behance Fortune's Wheel redesign](https://www.behance.net/gallery/181820855/Game-UI-Redesign-Fortunes-Wheel), [Awwwards-recognized Magic Bottle experience](https://www.nk.studio/work/magic-bottle), [Mobbin product reference library](https://mobbin.com/), and [Decide Now! wheel app](https://apps.apple.com/fr/app/decide-now-roue-de-la-fortune/id383718755?platform=watch).
+The design research included the [Dribbble Lucky Wheel presentation](https://dribbble.com/shots/18591372-The-Lucky-Wheel), [NN/g's guidance on purposeful motion](https://www.nngroup.com/articles/animation-purpose-ux/), and [web.dev's animation performance guide](https://web.dev/articles/animations-guide). These informed a clear wheel-first hierarchy, short state feedback, and transform/opacity-led motion. The provided Behance page returned 403 and Awwwards timed out in this environment, so they were not used for visual analysis. The Persian postcard composition and illustrations are original.
 
 ## Stack
 
@@ -18,8 +16,9 @@ References: [Dribbble date app work](https://dribbble.com/shots/22984521-Dating-
 - Vite for development and static production assets
 - SVG wheel with a pure, independently tested geometry and selection engine
 - Vazirmatn Variable bundled locally through Fontsource
+- Canvas and local SVG artwork for shareable result postcards
 - Vitest for unit tests and Playwright for browser tests
-- Native HTML dialog and Web Share API with Clipboard fallback
+- Native HTML dialogs, Web Share API, and clipboard fallback
 
 ## Requirements
 
@@ -42,33 +41,44 @@ pnpm typecheck
 pnpm lint
 pnpm test
 pnpm build
-pnpm exec playwright install chromium
+pnpm exec playwright install chromium webkit
 pnpm test:e2e
 ```
 
-The browser tests check the rendered pointer against the selected SVG sector using the final computed transform, test rapid-click protection and repeated spins, exercise clipboard fallback, and check target viewport widths from 320px to 1440px.
+The browser suite verifies the visible segment under the pointer, rapid-click protection, repeat spins, mood changes, invitations, safe text rendering, PNG download, export failure fallback, reduced motion, clipboard sharing, and viewport widths from 320px to 1440px. It runs in Chromium, desktop WebKit, and an iPhone-sized WebKit emulation.
 
 ## Architecture
 
 ```text
 src/
   app/                         Page composition and focus restoration
-  data/activities.ts           Curated Persian date options
+  data/
+    activities.ts              Persian activity copy and suggestions
+    moods.ts                   Mood labels and curated activity pools
   features/
-    results/                   Accessible result dialog and sharing
+    invitations/               URL codec, greeting, composer, sharing
+    results/                    Postcard preview, SVG artwork, canvas export
     wheel/
-      components/              SVG wheel and tactile controls
-      engine/                  Secure selection and angle calculations
-      hooks/                   Spin animation lifecycle
-  styles/                      Tokens, responsive layout, and motion
-e2e/                           Playwright interaction and viewport tests
+      components/               SVG wheel and tactile controls
+      engine/                   Secure selection and angle calculations
+      hooks/                     Spin animation lifecycle
+  styles/                       Tokens, responsive layout, and motion
+e2e/                             Playwright interaction and viewport tests
 ```
 
-`wheel-engine.ts` owns segment geometry, unbiased selection with `crypto.getRandomValues`, rotation normalization, and final pointer alignment. `useWheelSpin` selects one index and passes it through animation to the result state; the visible wheel and result use that same selection. `activities.ts` keeps copy and segment colors out of the UI components.
+`wheel-engine.ts` owns segment geometry, unbiased selection with `crypto.getRandomValues`, rotation normalization, and final pointer alignment. `useWheelSpin` selects one index and passes it through animation to the result state; the wheel and result use that same selection. `moods.ts` selects a local pool before the spin, so each visible segment remains equally likely. `invitation-codec.ts` validates a versioned payload with a 52-character title, 100-character greeting, and 900-character URL limit. Imported text is rendered safely as text. Postcard PNGs are composed locally after the bundled Persian font loads and use no remote assets.
 
-## Editing the activity list
+## Activities and moods
 
-Edit `src/data/activities.ts`. Keep each ID unique and keep `wheelLabel` concise; the initial wheel is intentionally limited to ten equal-size segments for legibility. Each option includes a longer result title and description, emoji, segment color, and a light or dark label setting. A unit test checks every label/background pair for at least 4.5:1 contrast. The engine supports a changed number of options and recalculates every sector evenly.
+Edit `src/data/activities.ts`. Keep each ID unique and `wheelLabel` concise; the surprise wheel has ten equal-size segments, while the calm and outdoor pools have five each. Add every activity's illustration to `src/features/results/activity-artwork-data.ts` and its mood membership to `src/data/moods.ts`. Each activity includes a result title, description, short suggestion, share emoji, segment color, and label contrast setting. Tests check label contrast and segment alignment after pool changes.
+
+## Invitations and privacy
+
+Use **یه دعوت کوچولو** to add an optional title and greeting, pick a mood, and create a shareable link. The configuration lives in the URL fragment, so the web server does not receive it. Anyone with the link can read its text; avoid names and private details. Invitation content is not saved to local storage or a backend. Malformed or oversized links fall back to the default wheel.
+
+## Result postcards
+
+The result sheet includes a **ذخیره کارت** action for a crisp PNG and **اشتراک‌گذاری**. Browsers that support sharing image files send the postcard; other browsers fall back to the existing Persian text share and clipboard behavior. If image generation fails, sharing still attempts the text message.
 
 ## Deployment
 
