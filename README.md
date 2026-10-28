@@ -1,0 +1,83 @@
+# چرخِ قرار · Date Wheel
+
+A small, shareable Persian date picker built around a hand-crafted spinning wheel. It is a static React application with no backend, database, account, or runtime API dependency.
+
+**Version:** 1.0.0
+
+## Design notes
+
+The visual direction pairs warm paper and pomegranate tones with a brass-edged wheel, restrained ornament, and a calm Persian headline. The ten short labels keep the wheel readable on small screens; a result sheet turns the landing into a personal moment. Motion stays on transforms and opacity, and the wheel reduces to a short single turn for people who request reduced motion.
+
+Research looked at Dribbble date and couples-wheel concepts, Behance wheel reveal flows, Awwwards-recognized interactive storytelling, Mobbin's real-product screen and flow library, and a mature App Store wheel editor. The useful patterns were a single obvious action, clear touch feedback, anticipation before the result, and a distinct but familiar reveal. The implementation uses those principles with an original Persian visual system.
+
+References: [Dribbble date app work](https://dribbble.com/shots/22984521-Dating-Mobile-iOS-App), [Dribbble couples wheel search](https://dribbble.com/search/app-wheel), [Behance Fortune's Wheel redesign](https://www.behance.net/gallery/181820855/Game-UI-Redesign-Fortunes-Wheel), [Awwwards-recognized Magic Bottle experience](https://www.nk.studio/work/magic-bottle), [Mobbin product reference library](https://mobbin.com/), and [Decide Now! wheel app](https://apps.apple.com/fr/app/decide-now-roue-de-la-fortune/id383718755?platform=watch).
+
+## Stack
+
+- React 19 and TypeScript strict mode
+- Vite for development and static production assets
+- SVG wheel with a pure, independently tested geometry and selection engine
+- Vazirmatn Variable bundled locally through Fontsource
+- Vitest for unit tests and Playwright for browser tests
+- Native HTML dialog and Web Share API with Clipboard fallback
+
+## Requirements
+
+- Node.js 20.19+ or 22.12+
+- pnpm 12+
+
+## Install and run
+
+```sh
+pnpm install
+pnpm dev
+```
+
+Vite serves the app at `http://127.0.0.1:4173`.
+
+## Build and checks
+
+```sh
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+pnpm exec playwright install chromium
+pnpm test:e2e
+```
+
+The browser tests check the rendered pointer against the selected SVG sector using the final computed transform, test rapid-click protection and repeated spins, exercise clipboard fallback, and check target viewport widths from 320px to 1440px.
+
+## Architecture
+
+```text
+src/
+  app/                         Page composition and focus restoration
+  data/activities.ts           Curated Persian date options
+  features/
+    results/                   Accessible result dialog and sharing
+    wheel/
+      components/              SVG wheel and tactile controls
+      engine/                  Secure selection and angle calculations
+      hooks/                   Spin animation lifecycle
+  styles/                      Tokens, responsive layout, and motion
+e2e/                           Playwright interaction and viewport tests
+```
+
+`wheel-engine.ts` owns segment geometry, unbiased selection with `crypto.getRandomValues`, rotation normalization, and final pointer alignment. `useWheelSpin` selects one index and passes it through animation to the result state; the visible wheel and result use that same selection. `activities.ts` keeps copy and segment colors out of the UI components.
+
+## Editing the activity list
+
+Edit `src/data/activities.ts`. Keep each ID unique and keep `wheelLabel` concise; the initial wheel is intentionally limited to ten equal-size segments for legibility. Each option includes a longer result title and description, emoji, segment color, and a light or dark label setting. A unit test checks every label/background pair for at least 4.5:1 contrast. The engine supports a changed number of options and recalculates every sector evenly.
+
+## Static deployment
+
+Run `pnpm build` and serve the generated `dist/` directory with Nginx. For client-side fallback, use:
+
+```nginx
+location / {
+    try_files $uri $uri/ /index.html;
+}
+```
+
+The font is part of the build output, so the application makes no external font request. Sharing works on secure origins where browser sharing or clipboard access is available; both APIs fail with an honest status message when unavailable.
