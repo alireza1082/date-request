@@ -2,7 +2,7 @@
 
 A small, shareable Persian date picker built around a hand-crafted spinning wheel. It is a static React application with no backend, database, account, or runtime API dependency.
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 
 ## Design notes
 
@@ -70,14 +70,8 @@ e2e/                           Playwright interaction and viewport tests
 
 Edit `src/data/activities.ts`. Keep each ID unique and keep `wheelLabel` concise; the initial wheel is intentionally limited to ten equal-size segments for legibility. Each option includes a longer result title and description, emoji, segment color, and a light or dark label setting. A unit test checks every label/background pair for at least 4.5:1 contrast. The engine supports a changed number of options and recalculates every sector evenly.
 
-## Static deployment
+## Deployment
 
-Run `pnpm build` and serve the generated `dist/` directory with Nginx. For client-side fallback, use:
+Docker Compose is the recommended deployment. It binds the unprivileged Nginx container to `127.0.0.1:18080`; add the documented location snippet to an existing VPS Nginx HTTPS virtual host. Start with [deploy/README.md](deploy/README.md).
 
-```nginx
-location / {
-    try_files $uri $uri/ /index.html;
-}
-```
-
-The font is part of the build output, so the application makes no external font request. Sharing works on secure origins where browser sharing or clipboard access is available; both APIs fail with an honest status message when unavailable.
+For direct static hosting, run `pnpm install --frozen-lockfile` and `pnpm build`, then serve `dist/` using [deploy/nginx-static.conf.example](deploy/nginx-static.conf.example). No backend or runtime API is required. The bundled font makes no external font request.
