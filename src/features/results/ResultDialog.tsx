@@ -15,21 +15,50 @@ const shareFeedback: Readonly<Record<Exclude<ShareOutcome, "cancelled">, string>
   failed: "اشتراک‌گذاری انجام نشد. می‌تونی دوباره امتحان کنی.",
 };
 
+const RESULT_EXIT_DURATION = 260;
+const SPARKLE_COUNT = 8;
+
 export function ResultDialog({ activity, onDismiss, onSpinAgain }: ResultDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const closeTimeoutRef = useRef<number | null>(null);
+  const closingRef = useRef(false);
+  const spinAgainRef = useRef(false);
   const [shareMessage, setShareMessage] = useState("");
+  const [isClosing, setIsClosing] = useState(false);
+
+  const requestClose = () => {
+    const dialog = dialogRef.current;
+    if (!dialog?.open || closingRef.current) return;
+
+    closingRef.current = true;
+    setIsClosing(true);
+    const delay = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : RESULT_EXIT_DURATION;
+    closeTimeoutRef.current = window.setTimeout(() => {
+      closeTimeoutRef.current = null;
+      dialog.close();
+    }, delay);
+  };
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
 
     if (activity && !dialog.open) {
+      closingRef.current = false;
+      setIsClosing(false);
       dialog.showModal();
       dialog.querySelector<HTMLButtonElement>(".result-confirm")?.focus({ preventScroll: true });
       setShareMessage("");
     } else if (!activity && dialog.open) {
       dialog.close();
     }
+
+    return () => {
+      if (closeTimeoutRef.current !== null) {
+        window.clearTimeout(closeTimeoutRef.current);
+        closeTimeoutRef.current = null;
+      }
+    };
   }, [activity]);
 
   if (!activity) {
@@ -41,38 +70,47 @@ export function ResultDialog({ activity, onDismiss, onSpinAgain }: ResultDialogP
     if (outcome !== "cancelled") setShareMessage(shareFeedback[outcome]);
   };
 
-  const handleDismiss = () => {
-    dialogRef.current?.close();
+  const handleClosed = () => {
+    closingRef.current = false;
+    setIsClosing(false);
+    const shouldSpinAgain = spinAgainRef.current;
+    spinAgainRef.current = false;
+    onDismiss();
+    if (shouldSpinAgain) onSpinAgain();
   };
 
   const handleSpinAgain = () => {
-    dialogRef.current?.close();
-    onSpinAgain();
+    spinAgainRef.current = true;
+    requestClose();
   };
 
   return (
     <dialog
       ref={dialogRef}
-      className="result-dialog"
+      className={`result-dialog${isClosing ? " is-closing" : ""}`}
       aria-labelledby="result-title"
       aria-describedby="result-description"
-      onClose={onDismiss}
+      onClose={handleClosed}
+      onCancel={(event) => {
+        event.preventDefault();
+        requestClose();
+      }}
       onClick={(event) => {
-        if (event.target === event.currentTarget) handleDismiss();
+        if (event.target === event.currentTarget) requestClose();
       }}
     >
       <div className="result-card" style={{ "--result-accent": activity.color } as CSSProperties}>
-        <button className="dialog-close" type="button" onClick={handleDismiss} aria-label="بستن نتیجه">
+        <button className="dialog-close" type="button" onClick={requestClose} aria-label="بستن نتیجه">
           <span aria-hidden="true">×</span>
         </button>
         <div className="result-sparkles" aria-hidden="true">
-          {Array.from({ length: 14 }, (_, index) => (
+          {Array.from({ length: SPARKLE_COUNT }, (_, index) => (
             <i
               key={index}
               style={{
                 "--spark-index": index,
-                "--spark-x": `${Math.cos((index / 14) * Math.PI * 2) * (105 + (index % 3) * 22)}px`,
-                "--spark-y": `${Math.sin((index / 14) * Math.PI * 2) * (130 + (index % 2) * 25)}px`,
+                "--spark-x": `${Math.cos((index / SPARKLE_COUNT) * Math.PI * 2) * (82 + (index % 2) * 16)}px`,
+                "--spark-y": `${Math.sin((index / SPARKLE_COUNT) * Math.PI * 2) * (76 + (index % 2) * 14)}px`,
               } as CSSProperties}
             />
           ))}
@@ -82,9 +120,9 @@ export function ResultDialog({ activity, onDismiss, onSpinAgain }: ResultDialogP
         <h2 id="result-title" data-result-title={activity.id}>{activity.title}</h2>
         <p id="result-description" className="result-description">{activity.description}</p>
         <div className="result-rule" aria-hidden="true"><span>✳</span></div>
-        <p className="result-note">یه خاطرهٔ تازه منتظرِ ماست.</p>
+        <p className="result-note">باقیِ قصه‌اش با ماست.</p>
         <div className="result-actions">
-          <button className="button button-primary result-confirm" type="button" autoFocus onClick={handleDismiss}>
+          <button className="button button-primary result-confirm" type="button" autoFocus onClick={requestClose}>
             قبوله، بریم! <span aria-hidden="true">←</span>
           </button>
           <div className="result-secondary-actions">

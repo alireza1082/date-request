@@ -63,18 +63,25 @@ test("locks rapid clicks and reveals the activity under the visible pointer", as
     const index = Math.floor(pointerAngleInWheel / (360 / segmentCount));
     const segments = rotor.querySelectorAll<SVGPathElement>("[data-wheel-segment]");
     const segmentUnderPointer = segments[index];
+    const labelAngles = Array.from(rotor.querySelectorAll<SVGTextElement>(".wheel-label"), (label) => {
+      const matrix = label.getScreenCTM();
+      if (!matrix) throw new Error("A wheel label has no screen transform.");
+      return (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI;
+    });
 
     return {
       resultId: result.dataset.resultTitle,
       resultTitle: result.textContent?.trim(),
       visibleSegmentId: segmentUnderPointer?.dataset.wheelSegment,
       visibleSegmentTitle: segmentUnderPointer?.dataset.wheelTitle,
+      labelAngles,
       randomDrawCount: (window as Window & { __wheelDrawCount?: number }).__wheelDrawCount,
     };
   });
 
   expect(landing.visibleSegmentId).toBe(landing.resultId);
   expect(landing.visibleSegmentTitle).toBe(landing.resultTitle);
+  expect(landing.labelAngles.every((angle) => Math.abs(angle) < 0.1)).toBe(true);
   expect(landing.randomDrawCount).toBe(1);
 
   await page.getByRole("button", { name: /یه بار دیگه بچرخون/ }).click();

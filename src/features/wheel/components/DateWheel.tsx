@@ -1,6 +1,6 @@
 import type { CSSProperties, RefObject } from "react";
 import type { Activity } from "../../../data/activities";
-import { getSegmentAngles } from "../engine/wheel-engine";
+import { getSegmentAngles, normalizeDegrees } from "../engine/wheel-engine";
 
 const VIEWBOX_SIZE = 500;
 const CENTER = VIEWBOX_SIZE / 2;
@@ -11,6 +11,7 @@ interface DateWheelProps {
   readonly activities: readonly Activity[];
   readonly rotation: number;
   readonly isSpinning: boolean;
+  readonly hasResult: boolean;
   readonly wheelRef: RefObject<HTMLDivElement | null>;
   readonly spinButtonRef: RefObject<HTMLButtonElement | null>;
   readonly onSpin: () => void;
@@ -35,12 +36,14 @@ function segmentPath(start: number, end: number): string {
   ].join(" ");
 }
 
-export function DateWheel({ activities, rotation, isSpinning, wheelRef, spinButtonRef, onSpin }: DateWheelProps) {
+export function DateWheel({ activities, rotation, isSpinning, hasResult, wheelRef, spinButtonRef, onSpin }: DateWheelProps) {
+  const settledRotation = normalizeDegrees(rotation);
+
   return (
     <div className="wheel-scene">
       <div className="wheel-halo" aria-hidden="true" />
-      <div className="wheel-frame">
-        <div className={`wheel-pointer${isSpinning ? " is-spinning" : ""}`} aria-hidden="true">
+      <div className={`wheel-frame${hasResult ? " is-landed" : ""}`}>
+        <div className={`wheel-pointer${isSpinning ? " is-spinning" : ""}${hasResult ? " is-landed" : ""}`} aria-hidden="true">
           <span className="pointer-glint" />
         </div>
         <div className="wheel-inner-rim" aria-hidden="true" />
@@ -71,6 +74,7 @@ export function DateWheel({ activities, rotation, isSpinning, wheelRef, spinButt
                   <text
                     x={label.x}
                     y={label.y + 23}
+                    transform={`rotate(${-settledRotation} ${label.x} ${label.y + 23})`}
                     textAnchor="middle"
                     direction="rtl"
                     className={`wheel-label${activity.ink === "dark" ? " is-dark" : ""}`}

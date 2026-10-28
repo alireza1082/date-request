@@ -2,13 +2,13 @@
 
 A small, shareable Persian date picker built around a hand-crafted spinning wheel. It is a static React application with no backend, database, account, or runtime API dependency.
 
-**Version:** 1.0.1
+**Version:** 1.1.0
 
 ## Design notes
 
-The visual direction pairs warm paper and pomegranate tones with a brass-edged wheel, restrained ornament, and a calm Persian headline. The ten short labels keep the wheel readable on small screens; a result sheet turns the landing into a personal moment. Motion stays on transforms and opacity, and the wheel reduces to a short single turn for people who request reduced motion.
+The visual direction pairs warm paper and pomegranate tones with a brass-edged wheel, restrained ornament, and a calm Persian headline. This release tightens the wheel's spin into anticipation, momentum, and a gentle landing; settled labels turn upright again, and the result sheet reveals its copy in a quiet sequence. The ten short labels keep the wheel readable on small screens. Motion stays on transforms and opacity, and the wheel uses an immediate landing for people who request reduced motion.
 
-Research looked at Dribbble date and couples-wheel concepts, Behance wheel reveal flows, Awwwards-recognized interactive storytelling, Mobbin's real-product screen and flow library, and a mature App Store wheel editor. The useful patterns were a single obvious action, clear touch feedback, anticipation before the result, and a distinct but familiar reveal. The implementation uses those principles with an original Persian visual system.
+For this polish pass, I reviewed Dribbble's [Mobile UI - spin wheel](https://dribbble.com/shots/24216175-Mobile-UI-spin-wheel), the [Awwwards Magic Bottle feature](https://www.awwwards.com/sites/magic-bottle) and its [studio case study](https://www.nk.studio/work/magic-bottle/), plus [Mobbin's public reference-library overview](https://mobbin.com/). The object-as-gift story and invitation to explore informed the wheel's tactile framing and the reveal's paced entrance. Behance's Fortune's Wheel case appeared in search, but its direct page returned 403, so I did not use it for visual analysis. The Persian composition remains original.
 
 References: [Dribbble date app work](https://dribbble.com/shots/22984521-Dating-Mobile-iOS-App), [Dribbble couples wheel search](https://dribbble.com/search/app-wheel), [Behance Fortune's Wheel redesign](https://www.behance.net/gallery/181820855/Game-UI-Redesign-Fortunes-Wheel), [Awwwards-recognized Magic Bottle experience](https://www.nk.studio/work/magic-bottle), [Mobbin product reference library](https://mobbin.com/), and [Decide Now! wheel app](https://apps.apple.com/fr/app/decide-now-roue-de-la-fortune/id383718755?platform=watch).
 

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { calculateSpinTarget, selectRandomIndex } from "../engine/wheel-engine";
+import { calculateSpinTarget, FULL_TURN, selectRandomIndex } from "../engine/wheel-engine";
 
 const STANDARD_SPIN_DURATION = 5_200;
 const FULL_SPINS = 5;
-const SPIN_EASING = "cubic-bezier(0.12, 0.02, 0.18, 1)";
+const FAST_PHASE_ROTATION = FULL_TURN * 1.25;
 
 export interface WheelSpinState {
   readonly rotation: number;
@@ -53,12 +53,35 @@ export function useWheelSpin(): WheelSpinState {
 
       const animation = wheelElement.animate(
         [
-          { transform: `rotate(${rotationRef.current}deg)` },
-          { transform: `rotate(${target}deg)` },
+          {
+            transform: `rotate(${rotationRef.current}deg) scale(1)`,
+            offset: 0,
+            easing: "cubic-bezier(0.22, 0.72, 0.24, 1)",
+          },
+          {
+            transform: `rotate(${rotationRef.current - 7}deg) scale(0.992)`,
+            offset: 0.045,
+            easing: "cubic-bezier(0.32, 0, 0.72, 0.14)",
+          },
+          {
+            transform: `rotate(${rotationRef.current + FAST_PHASE_ROTATION}deg) scale(1.008)`,
+            offset: 0.18,
+            easing: "cubic-bezier(0.18, 0.76, 0.28, 1)",
+          },
+          {
+            transform: `rotate(${target - 120}deg) scale(1)`,
+            offset: 0.74,
+            easing: "cubic-bezier(0.18, 0.7, 0.28, 1)",
+          },
+          {
+            transform: `rotate(${target - 20}deg) scale(0.997)`,
+            offset: 0.94,
+            easing: "cubic-bezier(0.2, 0.72, 0.32, 1)",
+          },
+          { transform: `rotate(${target}deg) scale(1)`, offset: 1 },
         ],
         {
           duration: STANDARD_SPIN_DURATION,
-          easing: SPIN_EASING,
           fill: "forwards",
         },
       );

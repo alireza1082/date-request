@@ -64,12 +64,15 @@ export function App() {
           <div className="wheel-column">
             <div className="wheel-topline">
               <span><i aria-hidden="true" /> نوبتِ توئه</span>
-              <span className="turn-count">۰۱ <b>ـ</b> ۱۰</span>
+              <span className="wheel-count" aria-label="ده پیشنهاد برای قرار">
+                <strong>۱۰</strong><span>پیشنهادِ قرار</span>
+              </span>
             </div>
             <DateWheel
               activities={activities}
               rotation={wheel.rotation}
               isSpinning={wheel.isSpinning}
+              hasResult={wheel.selectedIndex !== null}
               wheelRef={wheelRef}
               spinButtonRef={spinButtonRef}
               onSpin={startSpin}
