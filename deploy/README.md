@@ -25,11 +25,61 @@ On the VPS:
 ```sh
 git clone <repository>
 cd date-request
-cp .env.example .env
-docker compose up -d --build
+test -e .env || cp -n .env.example .env
+docker compose config --quiet
+docker compose build
+docker compose up -d --wait --wait-timeout 90
 ```
 
 `APP_PORT` defaults to `18080`; `.env` can change it while the bind remains `127.0.0.1` only. The service restarts after a VPS reboot when Docker is enabled at boot.
+
+Before starting on a shared VPS, inspect `docker version`, `docker compose version`, `docker ps`, `sudo ss -ltnp`, `free -h`, and `df -h`. Check the existing firewall with its installed management tool, without changing rules. If `18080` is occupied, choose a free port in `.env` and use that port in the dedicated reverse proxy. Keep the same checkout directory and Compose project name on subsequent updates; a new project name can create a second deployment.
+
+Confirm that the intended release commit exists in the checkout (`git show --no-patch <approved-release-commit>`). A remote clone is not proof that it contains a newer local release; publish/transfer that commit through your normal authorized process first. Never discard local changes to switch releases.
+
+To transfer a local release without pushing, create `git bundle create /path/date-wheel-v1.1.0.bundle master` on the source machine and copy that file to the VPS. Run `git clone /path/date-wheel-v1.1.0.bundle date-request` and `git -C date-request bundle verify /path/date-wheel-v1.1.0.bundle` on the VPS. Continue with the install commands inside that directory. The bundle transfers source/history, not a built container; the VPS still needs network access to fetch base images and pinned packages. Its `origin` initially points to the bundle; use a fresh bundle for later transfers or deliberately configure the real remote once it contains the approved release.
+
+## Verify the container
+
+Run these checks before connecting the public virtual host:
+
+```sh
+docker compose ps
+docker compose logs --tail=100
+docker compose port frontend 8080
+DATE_WHEEL_CONTAINER=$(docker compose ps -q frontend)
+docker inspect "$DATE_WHEEL_CONTAINER" --format '{{.State.Health.Status}} {{json .HostConfig.PortBindings}}'
+docker inspect "$DATE_WHEEL_CONTAINER" --format 'image={{.Image}} restart={{.HostConfig.RestartPolicy.Name}}'
+docker compose exec -T frontend id
+docker compose exec -T frontend nginx -t
+docker compose exec -T frontend sh -c 'command -v node || true'
+```
+
+Expect `healthy`, only `127.0.0.1:<APP_PORT>` published for `8080/tcp`, restart policy `unless-stopped`, UID/GID `101`, a valid Nginx configuration, and no Node executable. A healthcheck failure marks the container unhealthy; it does not itself trigger the restart policy.
+
+The following uses the actual published port, including a customized `.env` port. Every HTTP status printed should be `200`. The asset loop covers JavaScript, CSS, and bundled Persian fonts; inspect the returned HTML to confirm it is Date Wheel.
+
+```sh
+DATE_WHEEL_URL="http://$(docker compose port frontend 8080)"
+curl -fsS -o /dev/null -w '%{http_code}\n' "$DATE_WHEEL_URL/"
+curl -fsS "$DATE_WHEEL_URL/healthz"
+curl -fsSI "$DATE_WHEEL_URL/index.html"
+docker compose exec -T frontend find /usr/share/nginx/html/assets -type f |
+while IFS= read -r asset; do
+    curl -fsS -o /dev/null -w '%{http_code} %{url_effective}\n' \
+        "$DATE_WHEEL_URL${asset#/usr/share/nginx/html}" || exit 1
+done
+
+DATE_WHEEL_CHECK_DIR=$(mktemp -d)
+curl -fsS "$DATE_WHEEL_URL/" -o "$DATE_WHEEL_CHECK_DIR/index.html"
+curl -fsS "$DATE_WHEEL_URL/verification/deep-route" -o "$DATE_WHEEL_CHECK_DIR/route.html"
+cmp "$DATE_WHEEL_CHECK_DIR/index.html" "$DATE_WHEEL_CHECK_DIR/route.html"
+cat "$DATE_WHEEL_CHECK_DIR/index.html"
+```
+
+`cmp` should succeed: the SPA route must return the same HTML. Check `curl -I` for a hashed asset path listed above: it must have `Cache-Control: public, max-age=31536000, immutable`. HTML must have `no-cache, no-store, must-revalidate`, `/healthz` must have `no-store`, and a missing `/assets/...` file must return `404`, not the SPA HTML. Confirm the security headers and correct JS/CSS/font content types in these responses.
+
+Then run `docker compose restart frontend`, followed by `docker compose up -d --wait --wait-timeout 90`, and repeat the HTTP checks and log inspection. This verifies restart behavior without rebooting the VPS. Record the successful checkout commit (`git rev-parse HEAD`) and actual image ID (`docker inspect "$DATE_WHEEL_CONTAINER" --format '{{.Image}}'`) in your deployment log. These commands are a verification procedure, not a statement that a particular deployment has passed.
 
 ## Operate the service
 
@@ -56,28 +106,60 @@ Use the last build command when you want to fetch a newer base image before rebu
 
 Open the existing HTTPS virtual host for the domain and add the `location /` block from [`nginx-reverse-proxy.conf.example`](nginx-reverse-proxy.conf.example). Replace the example domain in your existing `server_name`. The example is a location snippet, not a standalone server: leave the current `listen`, TLS, and certificate directives in place.
 
+First inspect `nginx -v` and `sudo nginx -T` locally on the VPS, locate that domain's dedicated server block, and check for duplicate `server_name` declarations. Keep configuration output private if other sites contain credentials. Merge into an existing `location /` for this domain if present; do not add a duplicate block or replace another site's configuration. Back up the dedicated file before editing.
+
 The proxy forwards the original host, client address chain, and scheme. With the location inside an HTTPS server, `$scheme` forwards `https`. After editing the existing file, validate and reload Nginx using the server's normal process, for example:
 
 ```sh
-sudo nginx -t
-sudo systemctl reload nginx
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
 No Certbot or certificate path is assumed. If traffic arrives through another trusted proxy or CDN, configure the existing Nginx real-IP handling there before relying on `$remote_addr`.
+
+If no domain is configured, leave the public virtual host pending. Set the domain's DNS `A` record to the VPS IPv4 address; add an `AAAA` record only if IPv6 routing to this VPS is working. Verify with `dig +short A <domain>` and `dig +short AAAA <domain>`. Inspect existing certificate tooling and port 80/443 routing before requesting a certificate for this domain. Preserve existing certificates and use the VPS's normal HTTPS management process.
+
+After Nginx validation/reload, run `curl -fsSI https://<domain>/`, `curl -fsS https://<domain>/healthz`, and repeat the asset and SPA checks using `DATE_WHEEL_URL=https://<domain>`. Do not use `curl -k`: certificate validation must pass. Inspect the initial response for unexpected redirects, and open the HTTPS page in a browser to check the console/network for missing files and mixed content. Local HTTP checks alone do not establish HTTPS or visual correctness.
 
 ## Update and rollback
 
 Update from the deployment branch:
 
+Before pulling or rebuilding an existing healthy deployment, record its commit/image identity in your deployment log and retain the running image under a local rollback tag. Do not use an unhealthy or unverified deployment as the known-good baseline:
+
+```sh
+DATE_WHEEL_PREVIOUS_CONTAINER=$(docker compose ps -q frontend)
+docker inspect "$DATE_WHEEL_PREVIOUS_CONTAINER" --format '{{.State.Health.Status}} {{.Image}}'
+DATE_WHEEL_PREVIOUS_IMAGE=$(docker inspect "$DATE_WHEEL_PREVIOUS_CONTAINER" --format '{{.Image}}')
+docker image tag "$DATE_WHEEL_PREVIOUS_IMAGE" date-wheel:rollback
+```
+
 ```sh
 git status --short
 git pull --ff-only
-docker compose up -d --build
+docker compose config --quiet
+docker compose build
+docker compose up -d --wait --wait-timeout 90
 docker compose ps
 curl -f http://127.0.0.1:18080/healthz
 ```
 
-To roll back, first ensure the working tree has no local changes you need, then check out a known-good commit or tag and rebuild:
+For an immediate rollback, use the retained image without rebuilding it. This restores the exact application image even when base-image tags have changed. Use the same project directory and `.env`:
+
+```sh
+DATE_WHEEL_ROLLBACK_FILE=$(mktemp)
+cat > "$DATE_WHEEL_ROLLBACK_FILE" <<'YAML'
+services:
+  frontend:
+    image: date-wheel:rollback
+YAML
+docker compose -f compose.yaml -f "$DATE_WHEEL_ROLLBACK_FILE" up -d --no-build --pull never --wait --wait-timeout 90 frontend
+docker compose ps
+docker compose logs --tail=100
+```
+
+Repeat health, HTTP, asset, and public HTTPS checks. A subsequent normal `docker compose up` uses the normal release image again, so record that rollback is active before any later update.
+
+If no retained image exists, first ensure the working tree is clean, then check out a known-good commit or tag containing compatible deployment files and rebuild. Commits predating Docker support cannot use this procedure directly. This restores that source version but may use newer base images, so it is not an exact image rollback:
 
 ```sh
 git status --short
