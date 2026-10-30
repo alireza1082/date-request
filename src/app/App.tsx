@@ -9,6 +9,10 @@ import { readInvitationFromLocation } from "../features/invitations/invitation-c
 import { DateWheel } from "../features/wheel/components/DateWheel";
 import { useWheelSpin } from "../features/wheel/hooks/useWheelSpin";
 import { ResultDialog } from "../features/results/ResultDialog";
+import { VisitorDetails } from "../features/visitor/VisitorDetails";
+import { createHistorySubmission, submitHistory, type HistorySubmission } from "../data/history-client";
+
+type HistoryUiStatus = "idle" | "saving" | "saved" | "failed";
 
 export function App() {
   const wheelRef = useRef<HTMLDivElement>(null);
@@ -20,6 +24,10 @@ export function App() {
   const [mood, setMood] = useState<MoodId>(invitationRead.invitation?.mood ?? "surprise");
   const [isGreetingOpen, setIsGreetingOpen] = useState(Boolean(invitationRead.invitation));
   const [showIntro, setShowIntro] = useState(!invitationRead.invitation);
+  const [showVisitorDetails, setShowVisitorDetails] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+  const [historyConsent, setHistoryConsent] = useState(false);
+  const [historyStatus, setHistoryStatus] = useState<HistoryUiStatus>("idle");
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [catalog, setCatalog] = useState<PublicCatalog | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(true);
@@ -28,6 +36,8 @@ export function App() {
   const [spinSnapshot, setSpinSnapshot] = useState<readonly CatalogActivity[] | null>(null);
   const [spinMood, setSpinMood] = useState<MoodId | null>(null);
   const spinLockRef = useRef(false);
+  const historySubmissionRef = useRef<HistorySubmission | null>(null);
+  const historyRequestLockRef = useRef(false);
   const displayedMood = spinSnapshot ? spinMood ?? mood : mood;
   const activities = useMemo(() => spinSnapshot ?? catalog?.activities.filter((activity) => activity.moods.includes(displayedMood)) ?? [], [catalog, displayedMood, spinSnapshot]);
   const selectedActivity = wheel.selectedIndex === null ? null : spinSnapshot?.[wheel.selectedIndex] ?? null;
@@ -51,8 +61,8 @@ export function App() {
   useEffect(() => { void loadCatalog(); }, [loadCatalog]);
 
   useEffect(() => {
-    if (!showIntro && !isGreetingOpen && catalog && !isPreparingSpin) spinButtonRef.current?.focus({ preventScroll: true });
-  }, [catalog, isPreparingSpin, showIntro, isGreetingOpen]);
+    if (!showIntro && !showVisitorDetails && !isGreetingOpen && catalog && !isPreparingSpin) spinButtonRef.current?.focus({ preventScroll: true });
+  }, [catalog, isPreparingSpin, showIntro, showVisitorDetails, isGreetingOpen]);
 
   const startSpin = useCallback(async () => {
     if (spinLockRef.current || wheel.isSpinning) return;
@@ -103,15 +113,63 @@ export function App() {
 
   const finishGreeting = useCallback(() => {
     setIsGreetingOpen(false);
-    window.requestAnimationFrame(() => spinButtonRef.current?.focus({ preventScroll: true }));
+    setShowVisitorDetails(true);
   }, []);
+
+  const saveCurrentHistory = useCallback(async () => {
+    if (!historyConsent || !selectedActivity || !spinMood || historyRequestLockRef.current) return;
+    let submission = historySubmissionRef.current;
+    try {
+      if (!submission) {
+        submission = createHistorySubmission({
+          activityId: selectedActivity.id,
+          activityTitle: selectedActivity.title,
+          moodId: spinMood,
+          displayName,
+          invitationUsed: Boolean(invitationRead.invitation),
+          invitationTitle: invitationRead.invitation?.title ?? "",
+        });
+        historySubmissionRef.current = submission;
+      }
+    } catch {
+      setHistoryStatus("failed");
+      return;
+    }
+
+    historyRequestLockRef.current = true;
+    setHistoryStatus("saving");
+    try {
+      await submitHistory(submission);
+      setHistoryStatus("saved");
+    } catch {
+      setHistoryStatus("failed");
+    } finally {
+      historyRequestLockRef.current = false;
+    }
+  }, [displayName, historyConsent, invitationRead.invitation, selectedActivity, spinMood]);
+
+  useEffect(() => {
+    if (!selectedActivity) {
+      historySubmissionRef.current = null;
+      historyRequestLockRef.current = false;
+      setHistoryStatus("idle");
+      return;
+    }
+    if (historyConsent) void saveCurrentHistory();
+  }, [historyConsent, saveCurrentHistory, selectedActivity]);
 
   const closeComposer = useCallback(() => {
     setIsComposerOpen(false);
     window.requestAnimationFrame(() => inviteButtonRef.current?.focus({ preventScroll: true }));
   }, []);
 
-  if (showIntro) return <IntroScreen onContinue={() => setShowIntro(false)} />;
+  if (showIntro) return <IntroScreen onContinue={() => { setShowIntro(false); setShowVisitorDetails(true); }} />;
+
+  if (showVisitorDetails) return <VisitorDetails onContinue={(name, consent) => {
+    setDisplayName(name);
+    setHistoryConsent(consent);
+    setShowVisitorDetails(false);
+  }} />;
 
   if (!catalog) return <>
     <CatalogGate loading={catalogLoading} error={catalogError} onRetry={() => void loadCatalog()} />
@@ -204,7 +262,18 @@ export function App() {
 
       <InvitationGreeting invitation={isGreetingOpen ? invitationRead.invitation : null} onContinue={finishGreeting} />
       <InvitationComposer open={isComposerOpen} defaultMood={mood} moodOptions={catalog.moods} onClose={closeComposer} />
-      <ResultDialog mood={spinMood ?? mood} invitation={invitationRead.invitation} activity={selectedActivity} onDismiss={dismissResult} onSpinAgain={spinAgain} />
+      <ResultDialog
+        mood={spinMood ?? mood}
+        invitation={invitationRead.invitation}
+        activity={selectedActivity}
+        historyStatus={historyStatus}
+        historyEvent={historyStatus === "saved" && historySubmissionRef.current
+          ? { eventId: historySubmissionRef.current.event_id, eventKey: historySubmissionRef.current.event_key }
+          : null}
+        onRetryHistory={() => void saveCurrentHistory()}
+        onDismiss={dismissResult}
+        onSpinAgain={spinAgain}
+      />
     </div>
   );
 }

@@ -12,6 +12,9 @@ interface ResultDialogProps {
   readonly mood: MoodId;
   readonly invitation: InvitationConfig | null;
   readonly activity: Activity | null;
+  readonly historyStatus: "idle" | "saving" | "saved" | "failed";
+  readonly historyEvent?: { readonly eventId: string; readonly eventKey: string } | null;
+  readonly onRetryHistory: () => void;
   readonly onDismiss: () => void;
   readonly onSpinAgain: () => void;
 }
@@ -28,7 +31,7 @@ function getShareFeedback(outcome: ShareOutcome, usedImage = false): string {
   return "";
 }
 
-export function ResultDialog({ mood, invitation, activity, onDismiss, onSpinAgain }: ResultDialogProps) {
+export function ResultDialog({ mood, invitation, activity, historyStatus, historyEvent, onRetryHistory, onDismiss, onSpinAgain }: ResultDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeTimeoutRef = useRef<number | null>(null);
   const closingRef = useRef(false);
@@ -182,7 +185,10 @@ export function ResultDialog({ mood, invitation, activity, onDismiss, onSpinAgai
           <button className="button button-repeat" type="button" onClick={handleSpinAgain} disabled={busyAction !== null}>
             یه بار دیگه بچرخون <span aria-hidden="true">↻</span>
           </button>
-          {invitation && <NotificationAction key={activity.id} activityId={activity.id} mood={mood} invitationTitle={invitation.title ?? ""} />}
+          {invitation && <NotificationAction key={activity.id} activityId={activity.id} mood={mood} invitationTitle={invitation.title ?? ""} historyEvent={historyEvent ?? null} />}
+          {historyStatus === "saving" && <p className="history-feedback" role="status">دارم نتیجه رو ثبت می‌کنم…</p>}
+          {historyStatus === "saved" && <p className="history-feedback" role="status">نتیجه ثبت شد؛ صاحب سایت می‌تونه اون رو ببینه.</p>}
+          {historyStatus === "failed" && <div className="history-feedback history-feedback-error" role="status"><span>نتیجه ثبت نشد.</span><button type="button" onClick={onRetryHistory}>تلاش دوباره</button></div>}
           <p className="share-feedback" role="status" aria-live="polite">{shareMessage}</p>
         </div>
       </div>

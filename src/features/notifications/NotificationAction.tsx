@@ -5,9 +5,10 @@ interface Props {
   readonly activityId: string;
   readonly mood: MoodId;
   readonly invitationTitle: string;
+  readonly historyEvent?: { readonly eventId: string; readonly eventKey: string } | null;
 }
 
-export function NotificationAction({ activityId, mood, invitationTitle }: Props) {
+export function NotificationAction({ activityId, mood, invitationTitle, historyEvent }: Props) {
   const [available, setAvailable] = useState<boolean | null>(null);
   const [state, setState] = useState<"idle" | "sending" | "sent" | "failed">("idle");
   const lock = useRef(false);
@@ -32,7 +33,10 @@ export function NotificationAction({ activityId, mood, invitationTitle }: Props)
       submissionId.current ??= crypto.randomUUID();
       const response = await fetch("/api/notify", {
         method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal,
-        body: JSON.stringify({ activity_id: activityId, mood, invitation_title: invitationTitle, consent: true, submission_id: submissionId.current }),
+        body: JSON.stringify({
+          activity_id: activityId, mood, invitation_title: invitationTitle, consent: true, submission_id: submissionId.current,
+          ...(historyEvent ? { history_event_id: historyEvent.eventId, history_event_key: historyEvent.eventKey } : {}),
+        }),
       });
       const data: unknown = await response.json();
       if (!response.ok || typeof data !== "object" || data === null || !("accepted" in data) || data.accepted !== true) throw new Error("Not accepted");

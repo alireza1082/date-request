@@ -16,6 +16,17 @@ const apiCatalog = {
 
 async function enterWheel(page: Page) {
   await page.getByRole("button", { name: "بزن بریم!" }).click();
+  await expect(page.locator(".visitor-screen")).toBeVisible();
+  const visitorLayout = await page.evaluate(() => {
+    const card = document.querySelector<HTMLElement>(".visitor-paper");
+    if (!card) throw new Error("The visitor privacy card is missing.");
+    const bounds = card.getBoundingClientRect();
+    return { scrollWidth: document.documentElement.scrollWidth, width: innerWidth, left: bounds.left, right: bounds.right };
+  });
+  expect(visitorLayout.scrollWidth).toBeLessThanOrEqual(visitorLayout.width);
+  expect(visitorLayout.left).toBeGreaterThanOrEqual(0);
+  expect(visitorLayout.right).toBeLessThanOrEqual(visitorLayout.width);
+  await page.getByRole("button", { name: "بدون وارد کردن اسم ادامه می‌دم" }).click();
   await expect(page.locator(".hub-button")).toBeVisible();
 }
 
@@ -274,6 +285,8 @@ test("creates a personalized, text-only-safe invitation and opens it as a greeti
   await expect(recipientPage.getByRole("radio", { name: /بریم بیرون/ })).toHaveAttribute("aria-checked", "true");
   await greeting.getByRole("button", { name: /بریم سراغ سورپرایز/ }).click();
   await expect(greeting).toBeHidden();
+  await expect(recipientPage.locator(".visitor-screen")).toBeVisible();
+  await recipientPage.getByRole("button", { name: "بدون وارد کردن اسم ادامه می‌دم" }).click();
   await expect(recipientPage.locator(".hub-button")).toBeFocused();
   await recipientPage.close();
 });
@@ -373,6 +386,7 @@ test("does not fall back to bundled options when the catalog fails and offers re
     : route.fulfill({ status: 503, json: { detail: "Activity catalog is unavailable." } }));
   await page.goto("/");
   await page.getByRole("button", { name: "بزن بریم!" }).click();
+  await page.getByRole("button", { name: "بدون وارد کردن اسم ادامه می‌دم" }).click();
   await expect(page.getByRole("heading", { name: "فعلاً به فهرست قرارها نمی‌رسیم" })).toBeVisible();
   await expect(page.locator(".hub-button")).toHaveCount(0);
   available = true;
@@ -391,6 +405,73 @@ test("shows the intro at each normal visit and keeps the entry accessible", asyn
     await enterWheel(page);
     await expect(page.locator(".hub-button")).toBeFocused();
   }
+});
+
+test("records a named invitation result only after opt-in and retries with the same event key", async ({ page }) => {
+  const submissions: Record<string, unknown>[] = [];
+  const notificationRequests: Record<string, unknown>[] = [];
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.route("**/api/status", (route) => route.fulfill({ json: { notifications_available: true } }));
+  await page.route("**/api/notify", async (route) => {
+    notificationRequests.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({ status: 200, json: { accepted: true } });
+  });
+  await page.route("**/api/history", async (route) => {
+    submissions.push(route.request().postDataJSON() as Record<string, unknown>);
+    const accepted = submissions.length > 1;
+    await route.fulfill({ status: accepted ? 202 : 503, json: accepted ? { recorded: true, duplicate: false } : { detail: "unavailable" } });
+  });
+  const token = Buffer.from(JSON.stringify({ version: 1, title: "جمعه‌ی کوچولو", mood: "surprise" })).toString("base64url");
+  await page.goto(`/#invite=${token}`);
+  await expect(page.locator(".welcome-screen")).toHaveCount(0);
+  await page.getByRole("button", { name: /بریم سراغ سورپرایز/ }).click();
+  await expect(page.locator("#visitor-name")).toBeFocused();
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.screenshot({ path: "test-results/visitor-name-privacy-mobile.png", fullPage: true, animations: "disabled" });
+  await page.getByLabel("اسمتو بنویس").fill("هم‌قرارِ امروز");
+  await page.getByText("مایلم نتیجهٔ چرخش ثبت بشه", { exact: true }).click();
+  await expect(page.locator("#history-consent")).toBeChecked();
+  await page.getByRole("button", { name: /بریم سراغ سورپرایز/ }).click();
+  await page.locator(".hub-button").click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.locator(".history-feedback-error")).toContainText("نتیجه ثبت نشد");
+  expect(submissions).toHaveLength(1);
+  expect(submissions[0]).toMatchObject({
+    consent: true, display_name: "هم‌قرارِ امروز", invitation_used: true, invitation_title: "جمعه‌ی کوچولو",
+  });
+
+  await page.getByRole("button", { name: "تلاش دوباره" }).click();
+  await expect(page.locator(".history-feedback")).toContainText("نتیجه ثبت شد");
+  expect(submissions).toHaveLength(2);
+  expect(submissions[1]?.event_id).toBe(submissions[0]?.event_id);
+  expect(submissions[1]?.event_key).toBe(submissions[0]?.event_key);
+
+  await page.getByRole("button", { name: "نتیجه رو براش بفرست 💌" }).click();
+  await expect(page.getByRole("button", { name: "نتیجه رسید! 💌" })).toBeDisabled();
+  expect(notificationRequests).toHaveLength(1);
+  expect(notificationRequests[0]).toMatchObject({
+    consent: true, activity_id: submissions[1]?.activity_id,
+    history_event_id: submissions[1]?.event_id, history_event_key: submissions[1]?.event_key,
+  });
+});
+
+test("declining history keeps the wheel usable and submits no event", async ({ page }) => {
+  let submissions = 0;
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.route("**/api/history", async (route) => {
+    submissions += 1;
+    await route.fulfill({ status: 202, json: { recorded: true, duplicate: false } });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "بزن بریم!" }).click();
+  await page.getByLabel("اسمتو بنویس").fill("اسمِ خصوصی");
+  await expect(page.getByLabel("مایلم نتیجهٔ چرخش ثبت بشه")).not.toBeChecked();
+  await page.getByRole("button", { name: /بریم سراغ سورپرایز/ }).click();
+  await page.locator(".hub-button").click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.locator(".hub-button")).toBeEnabled();
+  expect(submissions).toBe(0);
+  await expect(page.locator(".history-feedback")).toHaveCount(0);
 });
 
 test("renders joined Persian labels with centered upright glyphs in all moods", async ({ page }) => {
@@ -435,6 +516,7 @@ test("sends only after explicit consent, retries failure and locks accepted deli
   await page.goto(`/#invite=${token}`);
   await expect(page.locator(".welcome-screen")).toHaveCount(0);
   await page.getByRole("button", { name: /بریم سراغ سورپرایز/ }).click();
+  await page.getByRole("button", { name: "بدون وارد کردن اسم ادامه می‌دم" }).click();
   await page.locator(".hub-button").click();
   const send = page.getByRole("button", { name: "نتیجه رو براش بفرست 💌" });
   await expect(send).toBeEnabled();
@@ -454,6 +536,7 @@ test("keeps postcards usable when notifications are unavailable", async ({ page 
   const token = Buffer.from(JSON.stringify({version: 1, title: "یه قرار", mood: "calm"})).toString("base64url");
   await page.goto(`/#invite=${token}`);
   await page.getByRole("button", { name: /بریم سراغ سورپرایز/ }).click();
+  await page.getByRole("button", { name: "بدون وارد کردن اسم ادامه می‌دم" }).click();
   await page.locator(".hub-button").click();
   await expect(page.getByRole("button", { name: "نتیجه رو براش بفرست 💌" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "ذخیره کارت" })).toBeEnabled();

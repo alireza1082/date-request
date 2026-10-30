@@ -215,7 +215,7 @@ Admin reads require the existing admin session. Examples:
 - `GET /api/admin/history/stats` — recorded events only; `today_spins` and `last_7_days` use UTC.
 - `DELETE /api/admin/history` with JSON `{"confirmation":"CLEAR_HISTORY"}` — requires the existing exact Origin and session-bound `X-CSRF-Token`; it deletes only spin events.
 
-History responses explicitly mark `reported_events: true`; statistics are not fraud-proof and include only results visitors chose to record. Before integrating this endpoint, the frontend must explain that an optional display name and result may be viewed by the site owner, provide a real decline option, and skip the request entirely after decline. A history event never triggers Telegram. The separate result-send action remains explicit. The hashed event capability is used for trusted notification correlation.
+History responses explicitly mark `reported_events: true`; statistics are not fraud-proof and include only results visitors chose to record. The public experience now provides an unchecked opt-in before entering the wheel, explains that the result and optional display name can be viewed by the owner, and sends no history request after decline. A history event never triggers Telegram. The separate result-send action remains explicit. The hashed event capability is used for trusted notification correlation.
 
 ## A4.3: Telegram diagnostics (schema 6)
 
@@ -233,7 +233,7 @@ The admin actions share a process-global rate bucket (burst of three, refilling 
 
 The same-origin `/admin` SPA uses the existing A2 HttpOnly session and CSRF flow. The **قرارها و چرخ** section reads `GET /api/admin/activities` and the server-approved `GET /api/admin/icons` catalog, then uses the A3 create, patch, archive, and reorder endpoints. Every mutation obtains a fresh session-bound CSRF token and relies on the API's authentication, Origin, icon, palette, mood, and 2–10-per-mood validation. Existing IDs remain fixed after creation; archived rows can be restored as disabled options. Move-up/down actions provide keyboard-accessible ordering.
 
-The editor previews the selected icon, color, labels, and mood using the shared `DateWheel` renderer. The preview is isolated: it does not write history or send Telegram. The responsive activity list supports Persian title/ID search and mood/status filters. Result/postcard artwork resolves from the approved icon ID, allowing a newly created activity to use an existing bundled illustration without custom SVG input. This milestone does not yet replace the public wheel's bundled runtime catalog; that integration remains in progress, so activity edits currently take effect in the API immediately but not yet on an already-built public wheel.
+The editor previews the selected icon, color, labels, and mood using the shared `DateWheel` renderer. The preview is isolated: it does not write history or send Telegram. The responsive activity list supports Persian title/ID search and mood/status filters. Result/postcard artwork resolves from the approved icon ID, allowing a newly created activity to use an existing bundled illustration without custom SVG input. The public wheel now loads the database-backed catalog at runtime and refreshes it before each spin; edits apply without a frontend rebuild, while the active spin and its result retain their original immutable snapshot.
 
 ### Admin reports and settings UI
 
