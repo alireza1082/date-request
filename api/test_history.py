@@ -123,6 +123,7 @@ def test_schema_five_migration_preserves_existing_rows_and_rejects_newer(tmp_pat
     path = tmp_path / 'migration.sqlite3'
     database = connect_database(path)
     with database:
+        database.execute('DROP TABLE telegram_diagnostics')
         database.execute("INSERT INTO spins (id, created_at, display_name, mood_id, activity_id, activity_title, invitation_used, invitation_title) VALUES ('old', ?, '', 'calm', 'cafe', 'عنوان تاریخی', 0, '')", (timestamp(),))
         database.execute('DROP INDEX spins_event_key_hash')
         database.execute('DROP INDEX spins_mood_created')
@@ -134,10 +135,10 @@ def test_schema_five_migration_preserves_existing_rows_and_rejects_newer(tmp_pat
         database.execute('ALTER TABLE spins DROP COLUMN payload_hash')
         database.execute('PRAGMA user_version=4')
     initialize(database)
-    assert database.execute('PRAGMA user_version').fetchone()[0] == 5
+    assert database.execute('PRAGMA user_version').fetchone()[0] == 6
     assert database.execute("SELECT activity_title, telegram_status FROM spins WHERE id='old'").fetchone() == ('عنوان تاریخی', 'not_sent')
     with database:
-        database.execute('PRAGMA user_version=6')
+        database.execute('PRAGMA user_version=7')
     with pytest.raises(RuntimeError, match='newer'):
         initialize(database)
     assert database.execute("SELECT activity_title FROM spins WHERE id='old'").fetchone()[0] == 'عنوان تاریخی'

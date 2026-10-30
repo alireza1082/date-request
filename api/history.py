@@ -15,7 +15,6 @@ from api.auth import require_admin, require_admin_mutation
 MAX_PAGE_SIZE = 100
 MAX_OFFSET = 1_000_000
 MAX_HISTORY_EVENTS = 50_000
-ALLOWED_MOODS = {'surprise', 'calm', 'outdoor'}
 EVENT_KEY = re.compile(r'^[A-Za-z0-9_-]{43}$')
 EVENT_ID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
 PLAIN_TEXT = re.compile(r'[<>\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]')

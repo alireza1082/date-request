@@ -6,7 +6,7 @@ from pathlib import Path
 from api.seasonal_defaults import DEFAULTS
 
 CATALOG_PATH = Path(__file__).resolve().parents[1] / 'src/data/catalog.json'
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 BUSY_TIMEOUT_MS = 5000
 
 
@@ -72,6 +72,19 @@ def initialize(connection: sqlite3.Connection) -> None:
             connection.execute('CREATE INDEX spins_mood_created ON spins(mood_id, created_at DESC)')
             connection.execute('CREATE INDEX spins_activity_created ON spins(activity_id, created_at DESC)')
             connection.execute('CREATE INDEX spins_invitation_created ON spins(invitation_used, created_at DESC)')
+        if version < 6:
+            connection.execute('''CREATE TABLE telegram_diagnostics (
+                id INTEGER PRIMARY KEY CHECK(id=1),
+                last_success_at TEXT,
+                last_failure_at TEXT,
+                last_error TEXT,
+                success_count INTEGER NOT NULL DEFAULT 0 CHECK(success_count >= 0),
+                failure_count INTEGER NOT NULL DEFAULT 0 CHECK(failure_count >= 0),
+                last_test_at TEXT,
+                bot_validated_at TEXT,
+                validation_error TEXT
+            )''')
+            connection.execute('INSERT INTO telegram_diagnostics (id) VALUES (1)')
         connection.execute(f'PRAGMA user_version = {SCHEMA_VERSION}')
         connection.commit()
     except Exception:

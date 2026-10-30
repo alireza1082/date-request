@@ -8,19 +8,22 @@ import re
 import time
 from typing import Literal
 from urllib.parse import urlsplit
+import hashlib
+import hmac
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 import sqlite3
 
 from api.activities import install_activity_routes
-from api.auth import AdminAuth, Credentials, install_admin_auth
+from api.auth import AdminAuth, Credentials, install_admin_auth, require_admin, require_admin_mutation
 from api.catalog import CatalogResponse, validate_wheel_configuration
 from api.settings import install_settings_routes
 from api.history import cleanup_expired, install_history_routes
+from api.telegram import TelegramFailure, now_utc, read_diagnostics, record_send, record_validation, send_message, validate_bot
 from api.storage import connect_database, list_active_activities, notification_activity
 
 CATALOG = json.loads((Path(__file__).resolve().parents[1] / 'src/data/catalog.json').read_text())
@@ -34,6 +37,14 @@ class Notification(BaseModel):
     invitation_title: str = Field(default='', max_length=52)
     consent: Literal[True]
     submission_id: str = Field(pattern=r'^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$')
+    history_event_id: str | None = Field(default=None, pattern=r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+    history_event_key: str | None = Field(default=None, pattern=r'^[A-Za-z0-9_-]{43}$')
+
+    @model_validator(mode='after')
+    def history_capability_pair(self):
+        if (self.history_event_id is None) != (self.history_event_key is None):
+            raise ValueError('History event ID and capability must be supplied together')
+        return self
 
     @field_validator('consent', mode='before')
     @classmethod
@@ -65,6 +76,16 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, d
     history_budget, history_updated = 30.0, clock()
     submissions = {}  # id -> (expiry, payload, state); max 512; one API worker only
     slots = asyncio.Semaphore(2)
+    admin_telegram_budget, admin_telegram_updated = 3.0, clock()
+
+    def spend_telegram_admin_budget():
+        nonlocal admin_telegram_budget, admin_telegram_updated
+        now = clock()
+        admin_telegram_budget = min(3.0, admin_telegram_budget + max(0, now - admin_telegram_updated) / 60)
+        admin_telegram_updated = now
+        if admin_telegram_budget < 1:
+            raise HTTPException(429, 'Please try again later.', headers={'Retry-After': '60'})
+        admin_telegram_budget -= 1
 
     @asynccontextmanager
     async def lifespan(app):
@@ -178,7 +199,7 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, d
         now = clock()
         for key in [key for key, record in submissions.items() if record[0] <= now]:
             del submissions[key]
-        payload = (data.activity_id, data.mood, data.invitation_title)
+        payload = (data.activity_id, data.mood, data.invitation_title, data.history_event_id, data.history_event_key)
         previous = submissions.get(data.submission_id)
         if previous:
             if previous[1] != payload:
@@ -188,6 +209,19 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, d
             raise HTTPException(409, 'Submission is already being processed.')
         if len(submissions) >= 512 or slots.locked():
             raise HTTPException(429, 'Please try again later.')
+        history_link = None
+        if data.history_event_id is not None:
+            supplied_hash = hashlib.sha256(data.history_event_key.encode('ascii')).hexdigest()
+            try:
+                history_link = app.state.database.execute('''SELECT event_key_hash FROM spins
+                    WHERE id=? AND activity_id=? AND mood_id=? AND invitation_title=?''',
+                    (data.history_event_id, data.activity_id, data.mood, data.invitation_title)).fetchone()
+            except sqlite3.Error:
+                raise HTTPException(503, 'Notification is temporarily unavailable.') from None
+            if not history_link or not history_link[0] or not hmac.compare_digest(history_link[0], supplied_hash):
+                raise HTTPException(422, 'Invalid notification request.')
+            with app.state.database:
+                app.state.database.execute("UPDATE spins SET telegram_attempted=1, telegram_status='attempted' WHERE id=?", (data.history_event_id,))
         submissions[data.submission_id] = (now + 600, payload, 'pending')
         title = data.invitation_title or 'یه قرارِ کوچولو'
         message = (f'🎡 یه نفر گردونه رو چرخوند!\n\n💌 دعوت‌نامه: {title}\n'
@@ -195,17 +229,85 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, d
                    f'✨ پیشنهاد کوچولو:\n{activity[1]}\n\n(نتیجهٔ اعلام‌شده توسط فرستنده)')
         try:
             async with slots, asyncio.timeout(8):
-                response = await app.state.telegram.post(
-                    f'https://api.telegram.org/bot{token}/sendMessage',
-                    json={'chat_id': chat_id, 'text': message, 'link_preview_options': {'is_disabled': True}})
-                result = response.json()
-                if response.status_code != 200 or result.get('ok') is not True or not isinstance(result.get('result', {}).get('message_id'), int):
-                    raise ValueError('Telegram did not accept the message')
-        except (httpx.HTTPError, TimeoutError, ValueError, TypeError, AttributeError):
+                await send_message(app.state.telegram, token, chat_id, message)
+        except (TelegramFailure, TimeoutError) as failure:
             submissions.pop(data.submission_id, None)
+            summary = failure.summary if isinstance(failure, TelegramFailure) else 'پاسخ تلگرام در مهلت مقرر نرسید؛ پذیرش پیام قابل تأیید نیست.'
+            try:
+                record_send(app.state.database, False, summary)
+                if data.history_event_id:
+                    with app.state.database:
+                        app.state.database.execute("UPDATE spins SET telegram_attempted=1, telegram_succeeded=0, telegram_status='failed' WHERE id=?", (data.history_event_id,))
+            except sqlite3.Error:
+                pass
             raise HTTPException(502, 'Delivery could not be confirmed. Please try again.') from None
+        try:
+            accepted_at = now_utc()
+            record_send(app.state.database, True, None, at=accepted_at)
+            if data.history_event_id:
+                with app.state.database:
+                    app.state.database.execute("UPDATE spins SET telegram_attempted=1, telegram_succeeded=1, telegram_status='accepted', telegram_accepted_at=? WHERE id=?", (accepted_at, data.history_event_id))
+        except sqlite3.Error:
+            # Telegram acceptance is still true even if the diagnostic write fails.
+            pass
         submissions[data.submission_id] = (clock() + 600, payload, 'sent')
         return {'accepted': True}
+
+    @app.get('/api/admin/telegram/diagnostics')
+    async def telegram_diagnostics(request: Request, _admin: str = Depends(require_admin)):
+        try:
+            return read_diagnostics(request.app.state.database, configured=configured,
+                                    token_present=bool(token.strip()), destination_present=bool(chat_id.strip()))
+        except sqlite3.Error:
+            raise HTTPException(503, 'Telegram diagnostics are temporarily unavailable.') from None
+
+    @app.post('/api/admin/telegram/validate')
+    async def telegram_validate(request: Request, _admin: str = Depends(require_admin_mutation)):
+        spend_telegram_admin_budget()
+        if not token.strip():
+            summary = 'توکن ربات تنظیم نشده است.'
+            record_validation(request.app.state.database, False, summary)
+            return {'validated': False, 'error_summary': summary}
+        if slots.locked():
+            raise HTTPException(429, 'Please try again later.')
+        try:
+            async with slots:
+                result = await validate_bot(request.app.state.telegram, token)
+            record_validation(request.app.state.database, True, None)
+            return result
+        except TelegramFailure as error:
+            record_validation(request.app.state.database, False, error.summary)
+            return {'validated': False, 'error_summary': error.summary}
+        except sqlite3.Error:
+            raise HTTPException(503, 'Telegram diagnostics are temporarily unavailable.') from None
+
+    @app.post('/api/admin/telegram/test')
+    async def telegram_test(request: Request, _admin: str = Depends(require_admin_mutation)):
+        spend_telegram_admin_budget()
+        if not token.strip() or not chat_id.strip():
+            summary = 'توکن ربات یا مقصد تلگرام تنظیم نشده است.'
+            try:
+                with request.app.state.database:
+                    request.app.state.database.execute('UPDATE telegram_diagnostics SET last_test_at=?, last_error=? WHERE id=1', (now_utc(), summary))
+            except sqlite3.Error:
+                raise HTTPException(503, 'Telegram diagnostics are temporarily unavailable.') from None
+            return {'accepted': False, 'error_summary': summary}
+        if slots.locked():
+            raise HTTPException(429, 'Please try again later.')
+        message = '✅ تست اتصال Date Wheel موفق بود.\nاین پیام از پنل مدیریت ارسال شده است.'
+        try:
+            async with slots:
+                await send_message(request.app.state.telegram, token, chat_id, message)
+            record_send(request.app.state.database, True, None, is_test=True)
+            return {'accepted': True, 'read_by_recipient': None}
+        except TelegramFailure as error:
+            try:
+                record_send(request.app.state.database, False, error.summary, is_test=True)
+            except sqlite3.Error:
+                raise HTTPException(503, 'Telegram diagnostics are temporarily unavailable.') from None
+            return {'accepted': False, 'error_summary': error.summary}
+        except sqlite3.Error:
+            raise HTTPException(503, 'Telegram diagnostics are temporarily unavailable.') from None
 
     install_settings_routes(app)
     install_history_routes(app)

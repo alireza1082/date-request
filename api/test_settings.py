@@ -57,7 +57,7 @@ def test_schema_three_upgrade_preserves_existing_data_and_adds_only_missing_defa
         database.execute("INSERT INTO admin_sessions VALUES ('hash', 'version', 1, 2)")
         database.execute('PRAGMA user_version=3')
     initialize(database)
-    assert database.execute('PRAGMA user_version').fetchone()[0] == 5
+    assert database.execute('PRAGMA user_version').fetchone()[0] == 6
     rows = dict(database.execute('SELECT key, value FROM settings'))
     assert rows['halloween_enabled'] == 'true' and rows['halloween_title'] == 'متن قبلی'
     assert set(DEFAULTS) <= rows.keys()
@@ -86,6 +86,7 @@ def test_schema_four_migration_rolls_back_on_failure(tmp_path):
 
 
 def _downgrade_history(database):
+    database.execute('DROP TABLE IF EXISTS telegram_diagnostics')
     for index in ('spins_event_key_hash', 'spins_mood_created', 'spins_activity_created', 'spins_invitation_created'):
         database.execute(f'DROP INDEX IF EXISTS {index}')
     for column in ('telegram_accepted_at', 'telegram_status', 'event_key_hash', 'payload_hash'):
