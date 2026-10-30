@@ -1,8 +1,8 @@
 # چرخِ قرار · Date Wheel
 
-A tiny Persian interactive surprise for choosing a date together. The React application supports static hosting. An optional small FastAPI service sends consented results to one configured Telegram chat; its API also maintains a persistent SQLite activity catalog. There is no account system.
+A tiny Persian interactive surprise for choosing a date together. The frontend ships as static assets, while the lightweight FastAPI service provides the live activity catalog, seasonal settings, administration, consented history, and optional Telegram delivery. There is no visitor account system.
 
-**Version:** 1.3.0
+**Version:** 1.4.0
 
 ## Design notes
 
@@ -92,7 +92,7 @@ Docker Compose is the recommended deployment. It binds the unprivileged Nginx co
 
 For direct static asset hosting, run `pnpm install --frozen-lockfile` and `pnpm build`, then serve `dist/` using [deploy/nginx-static.conf.example](deploy/nginx-static.conf.example). The React app still requires the FastAPI service at the same-origin `/api/` path for its live catalog and settings; the example proxies that path to a localhost-only API. The bundled font makes no external font request.
 
-## Version 1.3.0
+## Version 1.4.0
 
 Normal visits open a paper invitation intro; personalized links retain their greeting and skip the extra intro. Wheel labels use centered, continuous Persian SVG text without negative letter spacing, outlines, or glyph shadows. The selection engine is unchanged.
 
@@ -112,6 +112,6 @@ pnpm dev
 
 Vite proxies `/api` to localhost:8000. No Telegram credentials are needed for development; notification availability is false until both backend variables are configured. If the API is offline, the public app shows a retryable catalog error rather than using stale bundled options. See [Telegram setup and operations](api/README.md). No secrets belong in `VITE_` variables.
 
-### Backend SQLite milestone (1.4.0 in progress)
+### Persistent administration and live catalog
 
-The API initializes a persistent SQLite catalog, settings, history, and Telegram diagnostics during lifespan startup. Compose stores it in a named volume; local Uvicorn defaults to ignored `data/date-wheel.sqlite3`, configurable through `DATABASE_PATH`. `/admin` provides secure login, an activity editor and shared wheel preview, a recorded-history view with filters, an overview of consented events, Halloween copy controls, and Telegram diagnostics/test actions. The public wheel now consumes `/api/catalog`; each new spin fetches fresh data and freezes its own result snapshot. Catalog errors never fall back to stale bundled activities. See [backend setup and API notes](api/README.md). Version 1.4.0 remains in development.
+The API initializes a persistent SQLite catalog, settings, history, and Telegram diagnostics during lifespan startup. Compose stores it in a named volume; local Uvicorn defaults to ignored `data/date-wheel.sqlite3`, configurable through `DATABASE_PATH`. `/admin` provides secure login, an activity editor and shared wheel preview, a recorded-history view with filters, an overview of consented events, Halloween copy controls, and Telegram diagnostics/test actions. The public wheel consumes `/api/catalog`; each new spin fetches fresh data and freezes its own result snapshot. Catalog errors never fall back to stale bundled activities. See [backend setup and API notes](api/README.md).

@@ -1,4 +1,4 @@
-# Optional Telegram notifications · 1.3.0
+# Date Wheel API · 1.4.0
 
 The browser posts a consented result to `/api/notify`. FastAPI validates it against the active SQLite activity/mood catalog and sends a plain-text Telegram `sendMessage` to **one server-configured chat**. A success response requires Telegram HTTP 200, `ok: true`, and a message ID. It means Telegram accepted the message, not that the owner read it. No real Telegram requests are made by automated tests.
 
@@ -33,7 +33,7 @@ From the repository root, use the venv commands in the main README. To enable li
 
 Production uses Python 3.13, one Uvicorn process, a persistent SQLite catalog, no background jobs, and no published API host port. Compose's frontend binding remains `127.0.0.1:18080:8080` (or the existing `APP_PORT` override). No VPS changes or deployment are performed by this release work.
 
-## SQLite integration milestone (1.4.0 in progress)
+## SQLite integration and persistence (1.4.0)
 
 A1 added storage startup and `GET /api/catalog`. A3 added authenticated editing and moved `/api/notify` validation/message copy to the persistent catalog. The current React app loads and validates `GET /api/catalog` at runtime. It never falls back to an outdated bundled activity list if the API is unavailable; it shows a retryable error instead.
 
@@ -41,7 +41,7 @@ FastAPI's lifespan creates the database parent directory if missing, opens the e
 
 - Local development defaults to `data/date-wheel.sqlite3` relative to the repository root. Export `DATABASE_PATH=/absolute/local/path/date-wheel.sqlite3` before Uvicorn to override it. `.env` is not automatically loaded by Uvicorn. Database files and the local `data/` directory are ignored by Git and Docker builds.
 - Compose fixes `DATABASE_PATH=/app/data/date-wheel.sqlite3` and mounts the project-scoped named volume `sqlite_data` at `/app/data`. Keeping the Compose path fixed ensures a host environment variable cannot accidentally put the database outside its volume. The image creates that directory owned by UID/GID 65534, mode 0700; Docker initializes new volume ownership from it. Existing volume permissions are never silently changed. The API remains non-root with a read-only root filesystem; the mounted directory is writable for the database, WAL, and SHM files.
-- Schema version 1 uses `PRAGMA user_version`, an immediate transaction for initial schema and catalog seeding, foreign-key enforcement, WAL, and a 5000ms busy timeout. Existing version-1 databases are not reseeded, so edits, disabled records, and deletions remain intact. Failed initial seeding rolls back both schema and version. The existing settings table is used by A4.1; the earlier foundation's spins table remains unused until history is implemented.
+- Schema version 1 uses `PRAGMA user_version`, an immediate transaction for initial schema and catalog seeding, foreign-key enforcement, WAL, and a 5000ms busy timeout. Existing version-1 databases are not reseeded, so edits, disabled records, and deletions remain intact. Failed initial seeding rolls back both schema and version. Later migrations add admin sessions, persistent settings, history, and Telegram diagnostics without reseeding or discarding catalog changes.
 
 ### Catalog response
 
@@ -78,7 +78,7 @@ Store the copied backup securely outside Git and verify it with `PRAGMA integrit
 
 Run `python -m pytest api -q` in the development venv for focused startup, persistence, catalog, migration, and existing Telegram contract tests. Each backend test receives its own temporary database through `api/conftest.py`.
 
-## A2: single-admin authentication (1.4.0 in development)
+## A2: single-admin authentication (included in 1.4.0)
 
 Authentication is disabled with generic HTTP 503 responses when configuration is missing or invalid; public wheel/catalog/Telegram endpoints continue to work. The `/admin` SPA uses this A2 authentication foundation and A3 protected activity APIs. Credentials are read at API startup and reach only the API container.
 
@@ -129,9 +129,9 @@ Direct local Uvicorn may use `ADMIN_ORIGIN=http://127.0.0.1:4173` plus the expli
 
 Focused tests use temporary databases, fake credentials and mocked Telegram; no real Telegram messages are sent. Design references: [OWASP session guidance](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html), [OWASP CSRF guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html), and [Python scrypt](https://docs.python.org/3/library/hashlib.html#hashlib.scrypt).
 
-## A3: persistent activity management (1.4.0 in development)
+## A3: persistent activity management (included in 1.4.0)
 
-All routes below are under `/api/admin`. Reads use `require_admin`; writes use `require_admin_mutation` plus the existing middleware protection. Log in using A2, obtain the session-bound CSRF token, and send both `X-CSRF-Token` and the exact configured `Origin` on writes. The 2 KB request limit remains in effect. Responses are never cached. A3 introduced no admin UI, history, campaign settings, or new release; A4 work in progress is documented below.
+All routes below are under `/api/admin`. Reads use `require_admin`; writes use `require_admin_mutation` plus the existing middleware protection. Log in using A2, obtain the session-bound CSRF token, and send both `X-CSRF-Token` and the exact configured `Origin` on writes. The 2 KB request limit remains in effect. Responses are never cached. The admin interface and A4 capabilities are documented in the current sections below.
 
 | Method | Route | Response |
 | --- | --- | --- |
@@ -195,7 +195,7 @@ The transaction from schema 2 to **3** adds only `activities.archived INTEGER NO
 
 Run `.venv/bin/python -m pytest api -q` from the repository root. Focused coverage includes auth/CSRF, CRUD, archive/restore, ordering, palette/icon validation, minimum/maximum counts, transactional rollback, persisted edits, migration preservation and mocked Telegram compatibility. No frontend visual suite is needed for this backend-only milestone.
 
-## A4.1: persistent seasonal settings (1.4.0 in development)
+## A4.1: persistent seasonal settings (included in 1.4.0)
 
 `GET /api/settings` returns the public seasonal values. `GET /api/admin/settings` requires the existing admin session, and `PATCH /api/admin/settings` additionally requires the existing Origin and session-bound CSRF token. PATCH accepts a nonempty subset of `halloween_enabled`, `halloween_title`, `halloween_subtitle`, `halloween_cta`, and `halloween_note`; text is length-limited and treated as plain text. Values are written transactionally to the existing SQLite `settings` table. Schema 4 inserts missing defaults transactionally with `INSERT OR IGNORE`; existing administrator values are preserved, and Halloween is disabled by default. Missing or invalid persisted values return 503 rather than being silently replaced. Updates are immediately visible from the public endpoint without a rebuild. Responses use the existing `no-store` policy.
 
