@@ -11,6 +11,8 @@ import { useWheelSpin } from "../features/wheel/hooks/useWheelSpin";
 import { ResultDialog } from "../features/results/ResultDialog";
 import { VisitorDetails } from "../features/visitor/VisitorDetails";
 import { createHistorySubmission, submitHistory, type HistorySubmission } from "../data/history-client";
+import { fetchSeasonalSettings, type SeasonalSettings } from "../data/seasonal-settings";
+import { HalloweenScreen } from "../features/halloween/HalloweenScreen";
 
 type HistoryUiStatus = "idle" | "saving" | "saved" | "failed";
 
@@ -25,8 +27,13 @@ export function App() {
   const [isGreetingOpen, setIsGreetingOpen] = useState(Boolean(invitationRead.invitation));
   const [showIntro, setShowIntro] = useState(!invitationRead.invitation);
   const [showVisitorDetails, setShowVisitorDetails] = useState(false);
+  const [visitorEntryComplete, setVisitorEntryComplete] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [historyConsent, setHistoryConsent] = useState(false);
+  const [seasonalSettings, setSeasonalSettings] = useState<SeasonalSettings | null>(null);
+  const [seasonalLoading, setSeasonalLoading] = useState(false);
+  const [seasonalError, setSeasonalError] = useState("");
+  const [showHalloween, setShowHalloween] = useState(false);
   const [historyStatus, setHistoryStatus] = useState<HistoryUiStatus>("idle");
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [catalog, setCatalog] = useState<PublicCatalog | null>(null);
@@ -61,8 +68,8 @@ export function App() {
   useEffect(() => { void loadCatalog(); }, [loadCatalog]);
 
   useEffect(() => {
-    if (!showIntro && !showVisitorDetails && !isGreetingOpen && catalog && !isPreparingSpin) spinButtonRef.current?.focus({ preventScroll: true });
-  }, [catalog, isPreparingSpin, showIntro, showVisitorDetails, isGreetingOpen]);
+    if (!showIntro && !showVisitorDetails && !showHalloween && !seasonalLoading && !seasonalError && !isGreetingOpen && catalog && !isPreparingSpin) spinButtonRef.current?.focus({ preventScroll: true });
+  }, [catalog, isPreparingSpin, seasonalError, seasonalLoading, showHalloween, showIntro, showVisitorDetails, isGreetingOpen]);
 
   const startSpin = useCallback(async () => {
     if (spinLockRef.current || wheel.isSpinning) return;
@@ -116,6 +123,28 @@ export function App() {
     setShowVisitorDetails(true);
   }, []);
 
+  const loadSeasonalSettings = useCallback(async () => {
+    setSeasonalLoading(true);
+    setSeasonalError("");
+    setSeasonalSettings(null);
+    try {
+      const settings = await fetchSeasonalSettings();
+      setSeasonalSettings(settings);
+      setShowHalloween(settings.halloween_enabled);
+    } catch (cause) {
+      setSeasonalError(cause instanceof Error ? cause.message : "تنظیمات سورپرایز دریافت نشد؛ دوباره تلاش کن.");
+      setShowHalloween(false);
+    } finally { setSeasonalLoading(false); }
+  }, []);
+
+  const finishVisitorDetails = useCallback((name: string, consent: boolean) => {
+    setDisplayName(name);
+    setHistoryConsent(consent);
+    setShowVisitorDetails(false);
+    setVisitorEntryComplete(true);
+    void loadSeasonalSettings();
+  }, [loadSeasonalSettings]);
+
   const saveCurrentHistory = useCallback(async () => {
     if (!historyConsent || !selectedActivity || !spinMood || historyRequestLockRef.current) return;
     let submission = historySubmissionRef.current;
@@ -165,11 +194,13 @@ export function App() {
 
   if (showIntro) return <IntroScreen onContinue={() => { setShowIntro(false); setShowVisitorDetails(true); }} />;
 
-  if (showVisitorDetails) return <VisitorDetails onContinue={(name, consent) => {
-    setDisplayName(name);
-    setHistoryConsent(consent);
-    setShowVisitorDetails(false);
-  }} />;
+  if (showVisitorDetails) return <VisitorDetails onContinue={finishVisitorDetails} />;
+
+  if (visitorEntryComplete && seasonalLoading) return <SeasonalSettingsGate loading error="" onRetry={() => void loadSeasonalSettings()} />;
+  if (visitorEntryComplete && seasonalError) return <SeasonalSettingsGate loading={false} error={seasonalError} onRetry={() => void loadSeasonalSettings()} onContinue={() => { setVisitorEntryComplete(false); setSeasonalError(""); }} />;
+  if (visitorEntryComplete && showHalloween && seasonalSettings) {
+    return <HalloweenScreen settings={seasonalSettings} onContinue={() => setShowHalloween(false)} />;
+  }
 
   if (!catalog) return <>
     <CatalogGate loading={catalogLoading} error={catalogError} onRetry={() => void loadCatalog()} />
@@ -286,5 +317,15 @@ function CatalogGate({ loading, error, onRetry }: { readonly loading: boolean; r
     <p>{loading ? "یه لحظه صبر کن تا پیشنهادهای امروز رو از سرور بگیریم." : error || "ارتباط با فهرست قرارها برقرار نشد."}</p>
     {loading ? <span className="catalog-gate-loading" role="status"><i /> در حال آماده‌سازی</span> : <button className="button button-primary" type="button" onClick={onRetry}>دوباره تلاش کن <span aria-hidden="true">↻</span></button>}
     <a href="/" className="catalog-gate-home">برگشت به آغاز</a>
+  </div></main>;
+}
+
+function SeasonalSettingsGate({ loading, error, onRetry, onContinue }: { readonly loading: boolean; readonly error: string; readonly onRetry: () => void; readonly onContinue?: () => void }) {
+  return <main className="catalog-gate" dir="rtl"><div className="catalog-gate-card">
+    <span className="catalog-gate-mark" aria-hidden="true">☾</span>
+    <p className="eyebrow">یک دعوتِ کوچک</p>
+    <h1>{loading ? "داریم سورپرایز رو آماده می‌کنیم…" : "تنظیمات دعوت فعلاً در دسترس نیست"}</h1>
+    <p>{loading ? "چند لحظه صبر کن تا حال‌وهوای امروز رو بگیریم." : error}</p>
+    {loading ? <span className="catalog-gate-loading" role="status"><i /> در حال آماده‌سازی</span> : <><button className="button button-primary" type="button" onClick={onRetry}>دوباره تلاش کن <span aria-hidden="true">↻</span></button>{onContinue && <button className="catalog-gate-home" type="button" onClick={onContinue}>ادامه بدون تجربهٔ فصلی</button>}</>}
   </div></main>;
 }

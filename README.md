@@ -80,6 +80,8 @@ Use **یه دعوت کوچولو** to add an optional title and greeting, pick a
 
 Before entering the wheel, visitors can add a short display name or continue without one. Spin history is a separate, unchecked opt-in. If enabled, the selected result and optional name are saved for the site owner to view; if declined, the app sends no history request and still works normally. Results are client-reported, retained for 90 days by default, and are not independently verified. Telegram sending is a separate deliberate action and does not require history consent. Names and history choices are kept only in page memory and are not put in URLs or browser storage.
 
+After this entry step the app fetches the current seasonal settings from `/api/settings`. If the owner has enabled Halloween, a short illustrated invitation appears with the saved Persian title, message, note, and CTA. The same invitation card is used in the admin preview. If settings cannot be reached, the visitor can retry or explicitly continue without the optional seasonal screen.
+
 ## Result postcards
 
 The result sheet includes a **ذخیره کارت** action for a crisp PNG and **اشتراک‌گذاری**. Browsers that support sharing image files send the postcard; other browsers fall back to the existing Persian text share and clipboard behavior. If image generation fails, sharing still attempts the text message.

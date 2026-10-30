@@ -361,6 +361,7 @@ button:focus-visible, a:focus-visible {
 .catalog-gate-loading { display: inline-flex; align-items: center; gap: .5rem; color: #947c71; font-size: .72rem; }
 .catalog-gate-loading i { width: .8rem; aspect-ratio: 1; border: 2px solid #c8a89b; border-left-color: transparent; border-radius: 50%; animation: wheel-spin 700ms linear infinite; }
 .catalog-gate-home { margin-top: 1rem; color: #987b73; font-size: .72rem; text-underline-offset: .2rem; }
+.catalog-gate-home[type="button"] { padding: .4rem; border: 0; background: transparent; font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: .2rem; }
 @keyframes wheel-spin { to { transform: rotate(360deg); } }
 
 .button {

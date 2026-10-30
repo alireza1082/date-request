@@ -97,13 +97,7 @@
 .admin-settings-explanation { margin: .75rem 0 1rem; color: #8a7971; font-size: .74rem; line-height: 1.85; }
 .admin-settings-editor { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
 .admin-settings-editor textarea { resize: vertical; line-height: 1.85; }
-.admin-halloween-preview { position: relative; display: grid; justify-items: start; gap: .35rem; overflow: hidden; margin-top: 1rem; padding: 1.15rem; border: 1px solid #3f354d; border-radius: 1rem; color: #fff4e5; background: radial-gradient(circle at 84% 8%, rgb(243 175 101 / 19%), transparent 14rem), linear-gradient(135deg, #252339, #3a2b42 58%, #51333b); }
-.admin-halloween-preview .admin-kicker { color: #edbc83; }
-.admin-halloween-preview h4 { position: relative; margin: 0; color: #fff5e8; font-size: 1.08rem; line-height: 1.55; }
-.admin-halloween-preview > p:not(.admin-kicker) { position: relative; max-width: 620px; margin: 0; color: #e7d5c6; font-size: .75rem; line-height: 1.9; white-space: pre-line; }
-.admin-halloween-preview small { position: relative; color: #ddbc9c; font-size: .66rem; line-height: 1.8; white-space: pre-line; }
-.admin-halloween-moon { position: absolute; top: -.45rem; left: 1rem; color: #ffdb9c; font-size: 3.5rem; opacity: .5; }
-.admin-halloween-preview-button { position: relative; display: inline-flex; min-height: 40px; align-items: center; margin-top: .35rem; padding: .45rem .8rem; border: 1px solid rgb(250 216 166 / 45%); border-radius: .72rem; color: #fff2db; background: linear-gradient(135deg, #b96c47, #8c4951); font-size: .71rem; }
+.admin-halloween-preview { margin-top: 1rem; padding: .75rem; border: 1px solid #e5d5c7; border-radius: 1rem; background: #f8f0e6; }
 .admin-settings-actions { display: flex; align-items: center; justify-content: space-between; gap: .8rem; margin-top: 1rem; }
 .admin-settings-actions > span { color: #987d6f; font-size: .67rem; }
 .admin-settings-actions button { min-height: 44px; font-size: .72rem; }

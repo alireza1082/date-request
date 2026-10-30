@@ -13,6 +13,13 @@ const apiCatalog = {
   })),
   moods: catalogSeed.moods,
 };
+const apiSettings = {
+  halloween_enabled: false,
+  halloween_title: "امشب یه شب معمولی نیست…",
+  halloween_subtitle: "لباس هالووینتو آماده کن؛ یه شب متفاوت در راهه.",
+  halloween_cta: "آماده‌ام، بزن بریم!",
+  halloween_note: "یه شبِ پاییزی برای خاطره‌های تازه.",
+};
 
 async function enterWheel(page: Page) {
   await page.getByRole("button", { name: "بزن بریم!" }).click();
@@ -28,6 +35,7 @@ async function enterWheel(page: Page) {
   expect(visitorLayout.right).toBeLessThanOrEqual(visitorLayout.width);
   await page.getByRole("button", { name: "بدون وارد کردن اسم ادامه می‌دم" }).click();
   await expect(page.locator(".hub-button")).toBeVisible();
+  await expect(page.locator(".halloween-screen")).toHaveCount(0);
 }
 
 async function inspectWheelLanding(page: Page) {
@@ -53,6 +61,7 @@ async function inspectWheelLanding(page: Page) {
 
 test.beforeEach(async ({ page }) => {
   await page.context().route("**/api/catalog", (route) => route.fulfill({ headers: { "Cache-Control": "no-store" }, json: apiCatalog }));
+  await page.context().route("**/api/settings", (route) => route.fulfill({ headers: { "Cache-Control": "no-store" }, json: apiSettings }));
   await page.addInitScript(() => {
     const testWindow = window as Window & { __wheelDrawCount?: number; __sharedMessage?: string };
     testWindow.__wheelDrawCount = 0;
@@ -472,6 +481,66 @@ test("declining history keeps the wheel usable and submits no event", async ({ p
   await expect(page.locator(".hub-button")).toBeEnabled();
   expect(submissions).toBe(0);
   await expect(page.locator(".history-feedback")).toHaveCount(0);
+});
+
+test("shows the editable Halloween invitation after name/privacy and before the wheel", async ({ page }) => {
+  let seasonal = apiSettings;
+  await page.route("**/api/settings", (route) => route.fulfill({ headers: { "Cache-Control": "no-store" }, json: seasonal }));
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/");
+  await expect(page.locator(".halloween-screen")).toHaveCount(0);
+  await page.getByRole("button", { name: "بزن بریم!" }).click();
+  await expect(page.locator(".visitor-screen")).toBeVisible();
+  await expect(page.locator(".halloween-screen")).toHaveCount(0);
+  seasonal = { ...apiSettings, halloween_enabled: true, halloween_title: "امشب زیر نور ماه…", halloween_subtitle: "لباس پاییزی‌تو آماده کن؛ یه شب متفاوت در راهه.", halloween_cta: "آماده‌ام، بزن بریم!", halloween_note: "کدوها روشنن، چرخ هم آماده‌ست." };
+  await page.getByRole("button", { name: /بریم سراغ سورپرایز/ }).click();
+  await expect(page.getByRole("heading", { name: seasonal.halloween_title })).toBeVisible();
+  await expect(page.getByText(seasonal.halloween_subtitle)).toBeVisible();
+  await expect(page.getByText(seasonal.halloween_note)).toBeVisible();
+  await page.screenshot({ path: "test-results/halloween-mobile.png", fullPage: true, animations: "disabled" });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({ path: "test-results/halloween-desktop.png", fullPage: true, animations: "disabled" });
+  for (const width of [320, 375, 390, 430, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    const layout = await page.evaluate(() => {
+      const invitation = document.querySelector<HTMLElement>(".halloween-invitation");
+      if (!invitation) throw new Error("The Halloween invitation card is missing.");
+      const bounds = invitation.getBoundingClientRect();
+      return { width: innerWidth, scrollWidth: document.documentElement.scrollWidth, left: bounds.left, right: bounds.right };
+    });
+    expect(layout.scrollWidth).toBeLessThanOrEqual(width);
+    expect(layout.left).toBeGreaterThanOrEqual(0);
+    expect(layout.right).toBeLessThanOrEqual(width);
+  }
+  await page.getByRole("button", { name: seasonal.halloween_cta }).click();
+  await expect(page.locator(".halloween-screen")).toHaveCount(0);
+  await expect(page.locator(".hub-button")).toBeFocused();
+});
+
+test("allows continuing when the optional seasonal settings service is unavailable", async ({ page }) => {
+  await page.route("**/api/settings", (route) => route.fulfill({ status: 503, json: { detail: "unavailable" } }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "بزن بریم!" }).click();
+  await page.getByRole("button", { name: "بدون وارد کردن اسم ادامه می‌دم" }).click();
+  await expect(page.getByRole("heading", { name: "تنظیمات دعوت فعلاً در دسترس نیست" })).toBeVisible();
+  await page.getByRole("button", { name: "ادامه بدون تجربهٔ فصلی" }).click();
+  await expect(page.locator(".hub-button")).toBeVisible();
+  await expect(page.locator(".halloween-screen")).toHaveCount(0);
+});
+
+test("keeps the invitation greeting before name entry and the configured Halloween screen", async ({ page }) => {
+  const token = Buffer.from(JSON.stringify({ version: 1, title: "قرارِ پاییزی", greeting: "یه غافلگیری کوچولو دارم.", mood: "calm" })).toString("base64url");
+  await page.route("**/api/settings", (route) => route.fulfill({ json: { ...apiSettings, halloween_enabled: true } }));
+  await page.goto(`/#invite=${token}`);
+  await expect(page.locator(".welcome-screen")).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "قرارِ پاییزی" })).toBeVisible();
+  await page.getByRole("button", { name: /بریم سراغ سورپرایز/ }).click();
+  await expect(page.locator("#visitor-name")).toBeFocused();
+  await page.getByRole("button", { name: "بدون وارد کردن اسم ادامه می‌دم" }).click();
+  await expect(page.getByRole("heading", { name: apiSettings.halloween_title })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /چرخ امروز کجا/ })).toHaveCount(0);
+  await page.getByRole("button", { name: apiSettings.halloween_cta }).click();
+  await expect(page.locator(".hub-button")).toBeVisible();
 });
 
 test("renders joined Persian labels with centered upright glyphs in all moods", async ({ page }) => {

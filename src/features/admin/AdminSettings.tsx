@@ -1,13 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
+import type { SeasonalSettings } from "../../data/seasonal-settings";
+import { HalloweenInvitationCard } from "../halloween/HalloweenScreen";
 import { AdminApiError, adminRequest, getAdminCsrf } from "./admin-api";
-
-interface SeasonalSettings {
-  readonly halloween_enabled: boolean;
-  readonly halloween_title: string;
-  readonly halloween_subtitle: string;
-  readonly halloween_cta: string;
-  readonly halloween_note: string;
-}
 interface TelegramDiagnostics {
   readonly api_operational: boolean;
   readonly configured: boolean;
@@ -98,7 +92,7 @@ export function AdminSettings() {
       <div className="admin-settings-card-head"><div><p className="admin-kicker">پیشنهاد فصلی</p><h3 id="halloween-settings-title">شب هالووین</h3></div><label className="admin-toggle"><input type="checkbox" checked={settings.halloween_enabled} onChange={(event) => update("halloween_enabled", event.target.checked)} aria-label="فعال‌کردن تجربهٔ هالووین" /><span aria-hidden="true" /><strong>{settings.halloween_enabled ? "روشن" : "خاموش"}</strong></label></div>
       <p className="admin-settings-explanation">با خاموش‌بودن، این صفحه به بازدیدکننده نمایش داده نمی‌شه. تغییرهای ذخیره‌شده برای ورودی‌های بعدی فعال می‌شن.</p>
       <div className="admin-settings-editor"><label>عنوان<input value={settings.halloween_title} maxLength={80} onChange={(event) => update("halloween_title", event.target.value)} /></label><label>متن دعوت<textarea rows={4} value={settings.halloween_subtitle} maxLength={240} onChange={(event) => update("halloween_subtitle", event.target.value)} /></label><label>متن دکمه<input value={settings.halloween_cta} maxLength={60} onChange={(event) => update("halloween_cta", event.target.value)} /></label><label>یادداشت کوتاه<textarea rows={2} value={settings.halloween_note} maxLength={160} onChange={(event) => update("halloween_note", event.target.value)} /></label></div>
-      <section className="admin-halloween-preview" aria-label="پیش‌نمایش متن دعوت هالووین"><span className="admin-halloween-moon" aria-hidden="true">☾</span><p className="admin-kicker">پیش‌نمایش دعوت</p><h4>{settings.halloween_title || "عنوان دعوت اینجا دیده می‌شه"}</h4><p>{settings.halloween_subtitle || "متن دعوتت رو بنویس تا اینجا ببینیش."}</p>{settings.halloween_note && <small>{settings.halloween_note}</small>}<span className="admin-halloween-preview-button">{settings.halloween_cta || "متن دکمه"}</span></section>
+      <section className="admin-halloween-preview" aria-label="پیش‌نمایش دعوت هالووین"><HalloweenInvitationCard settings={settings} onContinue={() => undefined} preview /></section>
       <div className="admin-settings-actions"><span>{dirty ? "تغییر ذخیره‌نشده" : "همه‌چیز ذخیره شده"}</span><button className="admin-primary" type="button" disabled={!dirty || saving} onClick={() => void saveSettings()}>{saving ? <><span className="admin-spinner" />در حال ذخیره…</> : "ذخیرهٔ تنظیمات"}</button></div>
     </section>
     {diagnostics && <section className="admin-settings-card admin-telegram-card" aria-labelledby="telegram-diagnostics-title">
