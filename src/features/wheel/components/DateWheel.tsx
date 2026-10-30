@@ -70,12 +70,15 @@ export function DateWheel({ activities, rotation, isSpinning, hasResult, wheelRe
                     data-wheel-segment={activity.id}
                     data-wheel-title={activity.title}
                   />
-                  <circle cx={label.x} cy={label.y} r="2.8" className="wheel-label-dot" />
+
                   <text
                     x={label.x}
-                    y={label.y + 23}
-                    transform={`rotate(${-settledRotation} ${label.x} ${label.y + 23})`}
+                    y={label.y}
+                    transform={`rotate(${-settledRotation} ${label.x} ${label.y})`}
                     textAnchor="middle"
+                    dominantBaseline="central"
+                    unicodeBidi="plaintext"
+                    lang="fa"
                     direction="rtl"
                     className={`wheel-label${activity.ink === "dark" ? " is-dark" : ""}`}
                   >

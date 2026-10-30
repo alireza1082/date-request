@@ -1,3 +1,5 @@
+import catalog from "./catalog.json";
+
 export interface Activity {
   readonly id: string;
   readonly title: string;
@@ -9,105 +11,7 @@ export interface Activity {
   readonly ink: "light" | "dark";
 }
 
-export const activities = [
-  {
-    id: "cafe",
-    title: "کافه‌گردی",
-    wheelLabel: "کافه",
-    description: "یک میز دنج کنار پنجره، دو فنجان قهوه و حرف‌هایی که تمام نمی‌شوند.",
-    suggestion: "هر کدوم یه نوشیدنی تازه امتحان کنین.",
-    emoji: "☕",
-    color: "#9d5862",
-    ink: "light",
-  },
-  {
-    id: "cinema",
-    title: "یک شب سینما",
-    wheelLabel: "سینما",
-    description: "فیلم را تو انتخاب کن؛ پاپ‌کورنِ دونفره با من.",
-    suggestion: "قبل از شروع، هر کدوم یه حدس از پایان فیلم بزنین.",
-    emoji: "🎞️",
-    color: "#6a6984",
-    ink: "light",
-  },
-  {
-    id: "ice-cream",
-    title: "بستنیِ بعد از پیاده‌روی",
-    wheelLabel: "بستنی",
-    description: "دو تا بستنی خوش‌رنگ و یک دورِ اضافه زیر نورهای شهر.",
-    suggestion: "هر کدوم یه طعم تازه انتخاب کنین و با هم شریک بشین.",
-    emoji: "🍦",
-    color: "#e3a280",
-    ink: "dark",
-  },
-  {
-    id: "dinner",
-    title: "شامِ دونفره",
-    wheelLabel: "شامِ دونفره",
-    description: "جایی تازه را امتحان کنیم و برای دسر هم حتماً جا بگذاریم.",
-    suggestion: "برای دسر، انتخاب رو بسپرین به همدیگه.",
-    emoji: "🍝",
-    color: "#e0ac73",
-    ink: "dark",
-  },
-  {
-    id: "breakfast",
-    title: "صبحانهٔ طولانی",
-    wheelLabel: "صبحانه",
-    description: "یک صبحِ بی‌عجله با نانِ گرم و برنامه‌ای برای هیچ‌جا.",
-    suggestion: "گوشی‌ها رو کنار بذارین و صبح رو طولانی‌تر کنین.",
-    emoji: "🥐",
-    color: "#dfbd83",
-    ink: "dark",
-  },
-  {
-    id: "walk",
-    title: "قدم‌زدنِ بی‌مقصد",
-    wheelLabel: "قدم‌زدن",
-    description: "کمی هوای تازه، دست‌های گرم و هر طرف که دلمان خواست.",
-    suggestion: "از سه چیز قشنگ توی مسیر عکس بگیرین.",
-    emoji: "🌿",
-    color: "#5d765f",
-    ink: "light",
-  },
-  {
-    id: "picnic",
-    title: "پیک‌نیکِ کوچک",
-    wheelLabel: "پیک‌نیک",
-    description: "یک زیرانداز، چند خوراکیِ محبوب و سهمِ مساوی از آفتاب.",
-    suggestion: "هر کدوم یه خوراکی کوچولو برای اون یکی بیارین.",
-    emoji: "🧺",
-    color: "#577571",
-    ink: "light",
-  },
-  {
-    id: "bookshop",
-    title: "کتاب‌فروشی‌گردی",
-    wheelLabel: "کتاب",
-    description: "برای هم کتاب انتخاب کنیم و بعد، گوشه‌ای چند صفحه بخوانیم.",
-    suggestion: "برای هم یه کتاب انتخاب کنین؛ حتی فقط از روی جلدش.",
-    emoji: "📚",
-    color: "#765f7c",
-    ink: "light",
-  },
-  {
-    id: "museum",
-    title: "یک موزهٔ دوست‌داشتنی",
-    wheelLabel: "موزه",
-    description: "آرام میان قصه‌های قدیمی بچرخیم و از نگاهِ هم چیز ببینیم.",
-    suggestion: "هر کدوم اثرِ موردعلاقه‌تون رو برای اون یکی پیدا کنین.",
-    emoji: "🏛️",
-    color: "#925b58",
-    ink: "light",
-  },
-  {
-    id: "bowling",
-    title: "بولینگ و خنده",
-    wheelLabel: "بولینگ",
-    description: "رقابت کاملاً دوستانه‌ست؛ جایزه‌اش را بازنده انتخاب می‌کند.",
-    suggestion: "بازنده، خوراکیِ دورِ بعد رو انتخاب می‌کنه.",
-    emoji: "🎳",
-    color: "#836943",
-    ink: "light",
-  },
-] as const satisfies readonly Activity[];
+export const activities: readonly Activity[] = catalog.activities.map((activity) => ({
+  ...activity,
+  ink: activity.ink === "dark" ? "dark" : "light",
+}));

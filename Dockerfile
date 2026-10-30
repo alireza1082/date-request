@@ -20,7 +20,7 @@ RUN pnpm build
 FROM nginx/nginx-unprivileged:stable-alpine-slim AS runtime
 
 LABEL org.opencontainers.image.title="Date Wheel" \
-      org.opencontainers.image.version="1.1.0" \
+      org.opencontainers.image.version="1.3.0" \
       org.opencontainers.image.description="Persian RTL date wheel static frontend"
 
 COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf

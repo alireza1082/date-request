@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { IntroScreen } from "../features/intro/IntroScreen";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getActivitiesForMood, type MoodId } from "../data/moods";
 import { InvitationComposer } from "../features/invitations/InvitationComposer";
 import { InvitationGreeting } from "../features/invitations/InvitationGreeting";
@@ -17,10 +18,15 @@ export function App() {
   const [invitationRead] = useState(() => readInvitationFromLocation(window.location.hash, window.location.href));
   const [mood, setMood] = useState<MoodId>(invitationRead.invitation?.mood ?? "surprise");
   const [isGreetingOpen, setIsGreetingOpen] = useState(Boolean(invitationRead.invitation));
+  const [showIntro, setShowIntro] = useState(!invitationRead.invitation);
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const activities = useMemo(() => getActivitiesForMood(mood), [mood]);
   const selectedActivity = wheel.selectedIndex === null ? null : activities[wheel.selectedIndex] ?? null;
   const activityCount = new Intl.NumberFormat("fa-IR").format(activities.length);
+
+  useEffect(() => {
+    if (!showIntro && !isGreetingOpen) spinButtonRef.current?.focus({ preventScroll: true });
+  }, [showIntro, isGreetingOpen]);
 
   const startSpin = useCallback(() => {
     spinWheel(wheelRef.current, activities.length);
@@ -51,6 +57,8 @@ export function App() {
     setIsComposerOpen(false);
     window.requestAnimationFrame(() => inviteButtonRef.current?.focus({ preventScroll: true }));
   }, []);
+
+  if (showIntro) return <IntroScreen onContinue={() => setShowIntro(false)} />;
 
   return (
     <div className="app-shell">
@@ -136,7 +144,7 @@ export function App() {
 
       <InvitationGreeting invitation={isGreetingOpen ? invitationRead.invitation : null} onContinue={finishGreeting} />
       <InvitationComposer open={isComposerOpen} defaultMood={mood} onClose={closeComposer} />
-      <ResultDialog activity={selectedActivity} onDismiss={dismissResult} onSpinAgain={spinAgain} />
+      <ResultDialog mood={mood} invitation={invitationRead.invitation} activity={selectedActivity} onDismiss={dismissResult} onSpinAgain={spinAgain} />
     </div>
   );
 }

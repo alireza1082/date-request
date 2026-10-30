@@ -1,3 +1,6 @@
+import type { MoodId } from "../../data/moods";
+import type { InvitationConfig } from "../invitations/invitation-codec";
+import { NotificationAction } from "../notifications/NotificationAction";
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { Activity } from "../../data/activities";
@@ -6,6 +9,8 @@ import { createPostcardBlob, downloadPostcard } from "./postcard-export";
 import { shareActivity, sharePostcard, type ShareOutcome } from "./share-activity";
 
 interface ResultDialogProps {
+  readonly mood: MoodId;
+  readonly invitation: InvitationConfig | null;
   readonly activity: Activity | null;
   readonly onDismiss: () => void;
   readonly onSpinAgain: () => void;
@@ -23,7 +28,7 @@ function getShareFeedback(outcome: ShareOutcome, usedImage = false): string {
   return "";
 }
 
-export function ResultDialog({ activity, onDismiss, onSpinAgain }: ResultDialogProps) {
+export function ResultDialog({ mood, invitation, activity, onDismiss, onSpinAgain }: ResultDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeTimeoutRef = useRef<number | null>(null);
   const closingRef = useRef(false);
@@ -177,6 +182,7 @@ export function ResultDialog({ activity, onDismiss, onSpinAgain }: ResultDialogP
           <button className="button button-repeat" type="button" onClick={handleSpinAgain} disabled={busyAction !== null}>
             یه بار دیگه بچرخون <span aria-hidden="true">↻</span>
           </button>
+          {invitation && <NotificationAction key={activity.id} activityId={activity.id} mood={mood} invitationTitle={invitation.title ?? ""} />}
           <p className="share-feedback" role="status" aria-live="polite">{shareMessage}</p>
         </div>
       </div>

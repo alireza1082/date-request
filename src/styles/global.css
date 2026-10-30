@@ -46,7 +46,7 @@ button:focus-visible, a:focus-visible {
   min-height: 100vh;
   min-height: 100svh;
   flex-direction: column;
-  overflow: hidden;
+  overflow: clip;
   background:
     radial-gradient(ellipse at 12% 17%, rgb(227 183 169 / 23%), transparent 31rem),
     radial-gradient(ellipse at 91% 83%, rgb(205 191 213 / 24%), transparent 34rem),
@@ -261,20 +261,17 @@ button:focus-visible, a:focus-visible {
 .wheel-svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .wheel-face { fill: #f2e3ce; }
 .wheel-segment { stroke: #f4e7d7; stroke-width: 2.2px; stroke-linejoin: round; }
-.wheel-label-dot { fill: rgb(255 247 229 / 77%); stroke: rgb(77 49 52 / 35%); stroke-width: 1px; }
 .wheel-label {
   fill: #fff9ef;
   font-family: "Vazirmatn Variable", "Vazirmatn", "Tahoma", sans-serif;
-  font-size: 17px;
+  font-size: 19px;
   font-weight: 600;
-  paint-order: stroke;
-  stroke: rgb(53 39 43 / 12%);
-  stroke-width: 1.2px;
-  stroke-linejoin: round;
-  letter-spacing: -0.4px;
-  filter: drop-shadow(0 1px 1px rgb(40 30 32 / 16%));
+  letter-spacing: normal;
+  font-kerning: normal;
+  stroke: none;
+  text-rendering: optimizeLegibility;
 }
-.wheel-label.is-dark { fill: #503a3b; stroke: rgb(255 248 231 / 16%); }
+.wheel-label.is-dark { fill: #503a3b; }
 .hub-ring { fill: none; stroke: rgb(255 246 226 / 94%); stroke-width: 2.1px; }
 .hub-shadow { fill: #61444b; filter: drop-shadow(0 3px 5px rgb(61 40 44 / 27%)); }
 .hub-face { fill: #fff5e8; stroke: #dec1a4; stroke-width: 1.5px; }
@@ -555,7 +552,7 @@ button:focus-visible, a:focus-visible {
   .intro-copy h1 { font-size: clamp(2.45rem, 5.6vw, 3.45rem); }
   .intro-stamp { display: none; }
   .wheel-scene { width: min(100%, 430px); }
-  .wheel-label { font-size: 17px; }
+  .wheel-label { font-size: 19px; }
 }
 
 @media (max-width: 680px) {
@@ -694,7 +691,7 @@ button:focus-visible, a:focus-visible {
 .wheel-frame { box-shadow: 0 26px 46px rgb(89 56 56 / 20%), 0 8px 16px rgb(89 56 56 / 12%), inset 0 2px 1px rgb(255 237 216 / 37%), inset 0 -7px 12px rgb(54 29 37 / 32%); }
 .wheel-frame::before { position: absolute; z-index: 1; inset: 0.7%; border: 1px solid rgb(248 222 187 / 25%); border-radius: inherit; content: ""; pointer-events: none; }
 .wheel-segment { stroke-width: 2.6px; }
-.wheel-label { paint-order: stroke fill; }
+
 .wheel-halo { box-shadow: 0 0 0 12px rgb(255 252 245 / 34%), 0 0 0 13px rgb(154 103 103 / 9%), 0 25px 55px rgb(147 101 94 / 6%); }
 .invitation-invalid { width: min(100% - 1rem, 650px); margin: 0 auto 0.5rem; padding: 0.72rem 1rem; border: 1px solid rgb(153 93 104 / 19%); border-radius: 14px; color: #80565a; background: rgb(255 250 242 / 83%); font-size: 0.77rem; text-align: center; }
 
@@ -880,3 +877,19 @@ button:focus-visible, a:focus-visible {
   .invite-trigger, .mood-option { transition-duration: 0.01ms; }
   .postcard-preview, .invitation-sun { animation: none; }
 }
+
+.welcome-screen { min-height: 100svh; display: grid; place-items: center; padding: max(1.3rem, env(safe-area-inset-top)) 1rem max(1.3rem, env(safe-area-inset-bottom)); background: radial-gradient(ellipse at 20% 20%, #eddcd5 0, transparent 55%), var(--paper); transition: opacity 240ms ease, transform 240ms var(--ease-out); }
+.welcome-screen.is-leaving { opacity: 0; transform: translateY(-10px); }
+.welcome-paper { position: relative; width: min(100%, 600px); padding: 2rem clamp(1.1rem, 5vw, 4rem); border: 1px solid #dbc2ae; border-radius: 180px 180px 28px 28px; text-align: center; background: linear-gradient(145deg, #fffaf3, #f5e8db); box-shadow: 0 24px 65px #70454d1c, inset 0 0 0 7px #fffaf25c; animation: dialog-arrive 600ms var(--ease-out) both; }
+.welcome-edition { display: block; margin-top: 1rem; color: #8b6962; font-size: .75rem; }
+.welcome-art { display: block; width: min(75%, 280px); margin: 1.3rem auto .4rem; }
+.welcome-eyebrow { color: var(--berry); font-size: .78rem; }
+.welcome-paper h1 { margin: .7rem 0; font-size: clamp(1.8rem, 5vw, 2.7rem); line-height: 1.7; }
+.welcome-paper em { color: var(--berry); font-style: normal; }
+.welcome-description { font-size: .88rem; line-height: 2.2; color: #7b625c; }
+.welcome-cta { width: min(100%, 330px); margin: 1.2rem auto .8rem; }
+.welcome-footnote { display: block; color: #987b6f; font-size: .67rem; }
+.notification-action { margin-top: .75rem; padding-top: .7rem; border-top: 1px solid #d9bda366; }
+.notification-action p { margin: .3rem 0 .5rem; color: #805f58; font-size: .68rem; line-height: 1.9; }
+.notification-action .button { width: 100%; border-color: #c49a9e; color: #754951; background: #fff8f0; }
+@media (max-width: 360px) { .welcome-paper { padding-inline: .9rem; } .welcome-paper h1 { font-size: 1.65rem; } .welcome-description { font-size: .78rem; } }

@@ -17,3 +17,8 @@ playwright-report
 test-results
 *.tsbuildinfo
 *.log
+
+.venv
+__pycache__
+.pytest_cache
+api/test_*.py

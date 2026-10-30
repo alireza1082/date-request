@@ -1,8 +1,8 @@
 # چرخِ قرار · Date Wheel
 
-A tiny Persian interactive surprise for choosing a date together. It is a static React application with no backend, database, account, or runtime API dependency.
+A tiny Persian interactive surprise for choosing a date together. The React application supports static hosting. An optional small FastAPI service sends consented results to one configured Telegram chat; there is no database or account system.
 
-**Version:** 1.2.0 · The Little Surprise Edition
+**Version:** 1.3.0
 
 ## Design notes
 
@@ -24,6 +24,7 @@ The design research included the [Dribbble Lucky Wheel presentation](https://dri
 
 - Node.js 20.19+ or 22.12+
 - pnpm 12+
+- Optional local API: Python 3.11+ (the production image uses Python 3.13)
 
 ## Install and run
 
@@ -70,7 +71,7 @@ e2e/                             Playwright interaction and viewport tests
 
 ## Activities and moods
 
-Edit `src/data/activities.ts`. Keep each ID unique and `wheelLabel` concise; the surprise wheel has ten equal-size segments, while the calm and outdoor pools have five each. Add every activity's illustration to `src/features/results/activity-artwork-data.ts` and its mood membership to `src/data/moods.ts`. Each activity includes a result title, description, short suggestion, share emoji, segment color, and label contrast setting. Tests check label contrast and segment alignment after pool changes.
+Edit `src/data/catalog.json`. Keep each ID unique and `wheelLabel` concise; the surprise wheel has ten equal-size segments, while the calm and outdoor pools have five each. Add every activity's illustration to `src/features/results/activity-artwork-data.ts` and its mood membership to the same catalog. Each activity includes a result title, description, short suggestion, share emoji, segment color, and label contrast setting. Tests check label contrast and segment alignment after pool changes.
 
 ## Invitations and privacy
 
@@ -85,3 +86,23 @@ The result sheet includes a **ذخیره کارت** action for a crisp PNG and *
 Docker Compose is the recommended deployment. It binds the unprivileged Nginx container to `127.0.0.1:18080`; add the documented location snippet to an existing VPS Nginx HTTPS virtual host. Start with [deploy/README.md](deploy/README.md).
 
 For direct static hosting, run `pnpm install --frozen-lockfile` and `pnpm build`, then serve `dist/` using [deploy/nginx-static.conf.example](deploy/nginx-static.conf.example). No backend or runtime API is required. The bundled font makes no external font request.
+
+## Version 1.3.0
+
+Normal visits open a paper invitation intro; personalized links retain their greeting and skip the extra intro. Wheel labels use centered, continuous Persian SVG text without negative letter spacing, outlines, or glyph shadows. The selection engine is unchanged.
+
+Activity copy, mood membership, and Telegram allowlists share `src/data/catalog.json`. Keep that catalog authoritative when editing options. Invitation results include an explicit optional Telegram action; it sends only activity ID, mood, optional title, consent, and a short-lived idempotency key. It never sends the greeting or visitor metadata. **All invitations use the site owner's fixed Telegram destination**, including invitations created by other visitors; this is stated next to the action.
+
+Run the optional API from the repository root:
+
+```sh
+python3 -m venv .venv
+.venv/bin/pip install -r api/requirements-dev.txt
+.venv/bin/uvicorn api.main:app --host 127.0.0.1 --port 8000 --no-access-log
+# separate terminal
+pnpm dev
+# API tests, with mocked Telegram only
+.venv/bin/python -m pytest api -q
+```
+
+Vite proxies `/api` to localhost:8000. No credentials are needed for development; notification availability is false until both backend variables are configured. If the API is offline, the existing wheel, PNG, and sharing features still work. See [Telegram setup and operations](api/README.md). No secrets belong in `VITE_` variables.

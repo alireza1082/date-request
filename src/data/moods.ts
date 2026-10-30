@@ -1,3 +1,4 @@
+import catalog from "./catalog.json";
 import { activities, type Activity } from "./activities";
 
 export type MoodId = "surprise" | "calm" | "outdoor";
@@ -8,17 +9,11 @@ export interface MoodOption {
   readonly note: string;
 }
 
-export const moods = [
-  { id: "surprise", label: "سورپرایزم کن", note: "از همه‌جور قرار" },
-  { id: "calm", label: "یه چیز آروم", note: "دنج و بی‌عجله" },
-  { id: "outdoor", label: "بریم بیرون", note: "یه گشتِ تازه" },
-] as const satisfies readonly MoodOption[];
+export const moods: readonly MoodOption[] = catalog.moods.map((mood) => ({
+  ...mood, id: mood.id as MoodId,
+}));
 
-const activityIdsByMood: Readonly<Record<MoodId, readonly string[]>> = {
-  surprise: activities.map(({ id }) => id),
-  calm: ["cafe", "ice-cream", "breakfast", "walk", "bookshop"],
-  outdoor: ["cinema", "walk", "picnic", "museum", "bowling"],
-};
+const activityIdsByMood = Object.fromEntries(catalog.moods.map((mood) => [mood.id, mood.activities]));
 
 export function isMoodId(value: unknown): value is MoodId {
   return moods.some((mood) => mood.id === value);

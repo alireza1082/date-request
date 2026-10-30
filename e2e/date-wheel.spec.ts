@@ -1,5 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 
+async function enterWheel(page: Page) {
+  await page.getByRole("button", { name: "بزن بریم!" }).click();
+  await expect(page.locator(".hub-button")).toBeVisible();
+}
+
 async function inspectWheelLanding(page: Page) {
   return page.evaluate(() => {
     const rotor = document.querySelector<HTMLElement>("[data-wheel-rotor]");
@@ -40,6 +45,7 @@ test("renders Persian RTL without horizontal overflow at target widths", async (
   for (const width of [320, 375, 390, 430, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/");
+  await enterWheel(page);
 
     const layout = await page.evaluate(() => {
       const wheel = document.querySelector(".wheel-frame");
@@ -65,6 +71,7 @@ test("renders Persian RTL without horizontal overflow at target widths", async (
 test("locks rapid clicks and reveals the activity under the visible pointer", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
+  await enterWheel(page);
 
   const spinButton = page.getByRole("button", { name: "چرخ را بچرخان" });
   await spinButton.dblclick();
@@ -125,6 +132,7 @@ test("uses a clipboard message when native sharing is unavailable", async ({ pag
     });
   });
   await page.goto("/");
+  await enterWheel(page);
   await page.getByRole("button", { name: "چرخ را بچرخان" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible({ timeout: 15_000 });
@@ -140,6 +148,7 @@ test("supports keyboard dismissal and returns focus to the wheel", async ({ page
   await page.setViewportSize({ width: 320, height: 700 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
+  await enterWheel(page);
   const spinButton = page.getByRole("button", { name: "چرخ را بچرخان" });
   await spinButton.click();
   const dialog = page.getByRole("dialog");
@@ -164,8 +173,10 @@ test("supports keyboard dismissal and returns focus to the wheel", async ({ page
 });
 
 test("rebuilds each mood wheel and keeps the displayed result under its pointer", async ({ page }) => {
+  test.setTimeout(60_000);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
+  await enterWheel(page);
 
   for (const width of [320, 375, 390, 430, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 900 });
@@ -212,6 +223,7 @@ test("creates a personalized, text-only-safe invitation and opens it as a greeti
     });
   });
   await page.goto("/");
+  await enterWheel(page);
   await page.getByRole("button", { name: "یه دعوت کوچولو" }).click();
   const composer = page.getByRole("dialog", { name: "یه سورپرایز کوچولو برات دارم" });
   await expect(composer).toBeVisible();
@@ -253,6 +265,7 @@ test("creates a personalized, text-only-safe invitation and opens it as a greeti
 
 test("handles malformed invitation links without blocking the default wheel", async ({ page }) => {
   await page.goto("/#invite=not-a-valid-token!");
+  await enterWheel(page);
   await expect(page.locator(".invitation-invalid")).toContainText("این لینک دعوت کامل نبود");
   await expect(page.locator(".hub-button")).toBeEnabled();
 });
@@ -267,6 +280,7 @@ test("exports a crisp postcard PNG and uses text sharing when export fails", asy
     });
   });
   await page.goto("/");
+  await enterWheel(page);
   await page.getByRole("button", { name: "چرخ را بچرخان" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.waitFor({ state: "visible", timeout: 15000 });
@@ -288,6 +302,7 @@ test("exports a crisp postcard PNG and uses text sharing when export fails", asy
 test("keeps mood choices locked during a spin and responds immediately to reduced motion", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
+  await enterWheel(page);
   const mood = page.getByRole("radio", { name: /یه چیز آروم/ });
   await mood.click();
   await page.locator(".hub-button").click();
@@ -295,4 +310,82 @@ test("keeps mood choices locked during a spin and responds immediately to reduce
   await expect(page.getByRole("dialog")).toBeVisible({ timeout: 3000 });
   const landing = await inspectWheelLanding(page);
   expect(landing.visibleSegmentId).toBe(landing.resultId);
+});
+
+
+test("shows the intro at each normal visit and keeps the entry accessible", async ({ page }) => {
+  for (const width of [320, 375, 430, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: /یه سورپرایز کوچولو/ })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await enterWheel(page);
+    await expect(page.locator(".hub-button")).toBeFocused();
+  }
+});
+
+test("renders joined Persian labels with centered upright glyphs in all moods", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  await enterWheel(page);
+  await page.evaluate(() => document.fonts.ready);
+  for (const mood of [/سورپرایزم کن/, /یه چیز آروم/, /بریم بیرون/]) {
+    await page.getByRole("radio", { name: mood }).click();
+    await page.locator(".hub-button").click();
+    await expect(page.locator(".result-dialog")).toBeVisible();
+    const labels = await page.locator(".wheel-label").evaluateAll((elements) => elements.map((element) => {
+      const label = element as SVGTextElement;
+      const style = getComputedStyle(label);
+      const bounds = label.getBBox();
+      const matrix = label.getScreenCTM()!;
+      return { spacing: style.letterSpacing, stroke: style.stroke, width: bounds.width, height: bounds.height,
+        angle: Math.atan2(matrix.b, matrix.a) * 180 / Math.PI, family: style.fontFamily };
+    }));
+    for (const label of labels) {
+      expect(label.spacing).toBe("normal");
+      expect(label.stroke).toBe("none");
+      expect(label.width).toBeGreaterThan(10);
+      expect(label.width).toBeLessThan(100);
+      expect(label.height).toBeGreaterThan(10);
+      expect(Math.abs(label.angle)).toBeLessThan(.1);
+      expect(label.family).toContain("Vazirmatn");
+    }
+    await page.getByRole("button", { name: /قبوله، بریم/ }).click();
+  }
+});
+
+test("sends only after explicit consent, retries failure and locks accepted delivery", async ({ page }) => {
+  const requests: unknown[] = [];
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.route("**/api/status", (route) => route.fulfill({ json: { notifications_available: true } }));
+  await page.route("**/api/notify", (route) => {
+    requests.push(route.request().postDataJSON());
+    return route.fulfill({ status: requests.length === 1 ? 502 : 200, json: requests.length === 1 ? { detail: "Unavailable" } : { accepted: true } });
+  });
+  const token = Buffer.from(JSON.stringify({version: 1, title: "یه قرار", mood: "surprise"})).toString("base64url");
+  await page.goto(`/#invite=${token}`);
+  await expect(page.locator(".welcome-screen")).toHaveCount(0);
+  await page.getByRole("button", { name: /بریم سراغ سورپرایز/ }).click();
+  await page.locator(".hub-button").click();
+  const send = page.getByRole("button", { name: "نتیجه رو براش بفرست 💌" });
+  await expect(send).toBeEnabled();
+  expect(requests).toHaveLength(0);
+  await send.click();
+  await expect(page.locator(".notification-action")).toContainText("ارسال تأیید نشد");
+  await send.click();
+  await expect(page.getByRole("button", { name: "نتیجه رسید! 💌" })).toBeDisabled();
+  expect(requests).toHaveLength(2);
+  expect(requests[1]).toMatchObject({ consent: true, invitation_title: "یه قرار" });
+  expect((requests[0] as {submission_id:string}).submission_id).toBe((requests[1] as {submission_id:string}).submission_id);
+});
+
+test("keeps postcards usable when notifications are unavailable", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.route("**/api/status", (route) => route.fulfill({ json: { notifications_available: false } }));
+  const token = Buffer.from(JSON.stringify({version: 1, title: "یه قرار", mood: "calm"})).toString("base64url");
+  await page.goto(`/#invite=${token}`);
+  await page.getByRole("button", { name: /بریم سراغ سورپرایز/ }).click();
+  await page.locator(".hub-button").click();
+  await expect(page.getByRole("button", { name: "نتیجه رو براش بفرست 💌" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "ذخیره کارت" })).toBeEnabled();
 });

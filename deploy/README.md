@@ -6,9 +6,10 @@
 Internet → existing VPS Nginx → 127.0.0.1:18080
                               → Docker: unprivileged Nginx :8080
                               → static Vite build
+                              → /api/* → internal FastAPI :8000 → Telegram
 ```
 
-Compose publishes only on IPv4 loopback. It does not take over ports 80 or 443 and does not require a backend, database, volume, or secret.
+Compose publishes only on IPv4 loopback. It does not take over ports 80 or 443 and adds an internal API with no host port. Telegram credentials are optional and reach only that API. No database or volume is needed.
 
 ## Requirements
 
@@ -28,7 +29,7 @@ cd date-request
 test -e .env || cp -n .env.example .env
 docker compose config --quiet
 docker compose build
-docker compose up -d --wait --wait-timeout 90
+docker compose up -d
 ```
 
 `APP_PORT` defaults to `18080`; `.env` can change it while the bind remains `127.0.0.1` only. The service restarts after a VPS reboot when Docker is enabled at boot.
@@ -37,7 +38,7 @@ Before starting on a shared VPS, inspect `docker version`, `docker compose versi
 
 Confirm that the intended release commit exists in the checkout (`git show --no-patch <approved-release-commit>`). A remote clone is not proof that it contains a newer local release; publish/transfer that commit through your normal authorized process first. Never discard local changes to switch releases.
 
-To transfer a local release without pushing, create `git bundle create /path/date-wheel-v1.2.0.bundle master HEAD` on the source machine and copy that file to the VPS. Including `HEAD` lets a fresh clone select its default branch. Run `git clone /path/date-wheel-v1.2.0.bundle date-request` and `git -C date-request bundle verify /path/date-wheel-v1.2.0.bundle` on the VPS. Continue with the install commands inside that directory. The bundle transfers source/history, not a built container; the VPS still needs network access to fetch base images and pinned packages. Its `origin` initially points to the bundle; use a fresh bundle for later transfers or deliberately configure the real remote once it contains the approved release.
+To transfer a local release without pushing, create `git bundle create /path/date-wheel-v1.3.0.bundle master HEAD` on the source machine and copy that file to the VPS. Including `HEAD` lets a fresh clone select its default branch. Run `git clone /path/date-wheel-v1.3.0.bundle date-request` and `git -C date-request bundle verify /path/date-wheel-v1.3.0.bundle` on the VPS. Continue with the install commands inside that directory. The bundle transfers source/history, not a built container; the VPS still needs network access to fetch base images and pinned packages. Its `origin` initially points to the bundle; use a fresh bundle for later transfers or deliberately configure the real remote once it contains the approved release.
 
 ## Verify the container
 
@@ -79,7 +80,7 @@ cat "$DATE_WHEEL_CHECK_DIR/index.html"
 
 `cmp` should succeed: the SPA route must return the same HTML. Check `curl -I` for a hashed asset path listed above: it must have `Cache-Control: public, max-age=31536000, immutable`. HTML must have `no-cache, no-store, must-revalidate`, `/healthz` must have `no-store`, and a missing `/assets/...` file must return `404`, not the SPA HTML. Confirm the security headers and correct JS/CSS/font content types in these responses.
 
-Then run `docker compose restart frontend`, followed by `docker compose up -d --wait --wait-timeout 90`, and repeat the HTTP checks and log inspection. This verifies restart behavior without rebooting the VPS. Record the successful checkout commit (`git rev-parse HEAD`) and actual image ID (`docker inspect "$DATE_WHEEL_CONTAINER" --format '{{.Image}}'`) in your deployment log. These commands are a verification procedure, not a statement that a particular deployment has passed.
+Then run `docker compose restart`, followed by `docker compose up -d`, and repeat the HTTP checks and log inspection. This verifies restart behavior without rebooting the VPS. Record the successful checkout commit (`git rev-parse HEAD`) and actual image ID (`docker inspect "$DATE_WHEEL_CONTAINER" --format '{{.Image}}'`) in your deployment log. These commands are a verification procedure, not a statement that a particular deployment has passed.
 
 ## Operate the service
 
@@ -94,9 +95,9 @@ The health endpoint returns `200 ok`. Compose also checks it inside the containe
 ```sh
 docker compose stop
 docker compose start
-docker compose restart frontend
+docker compose restart
 docker compose up -d --build
-docker compose build --pull frontend && docker compose up -d
+docker compose build --pull && docker compose up -d
 docker compose down
 ```
 
@@ -131,6 +132,12 @@ DATE_WHEEL_PREVIOUS_CONTAINER=$(docker compose ps -q frontend)
 docker inspect "$DATE_WHEEL_PREVIOUS_CONTAINER" --format '{{.State.Health.Status}} {{.Image}}'
 DATE_WHEEL_PREVIOUS_IMAGE=$(docker inspect "$DATE_WHEEL_PREVIOUS_CONTAINER" --format '{{.Image}}')
 docker image tag "$DATE_WHEEL_PREVIOUS_IMAGE" date-wheel:rollback
+# For 1.3+ also retain the API image when present.
+DATE_WHEEL_PREVIOUS_API=$(docker compose ps -q api)
+# Run the following only when that container exists:
+docker inspect "$DATE_WHEEL_PREVIOUS_API" --format '{{.State.Health.Status}} {{.Image}}'
+DATE_WHEEL_PREVIOUS_API_IMAGE=$(docker inspect "$DATE_WHEEL_PREVIOUS_API" --format '{{.Image}}')
+docker image tag "$DATE_WHEEL_PREVIOUS_API_IMAGE" date-wheel-api:rollback
 ```
 
 ```sh
@@ -138,12 +145,12 @@ git status --short
 git pull --ff-only
 docker compose config --quiet
 docker compose build
-docker compose up -d --wait --wait-timeout 90
+docker compose up -d
 docker compose ps
 curl -f http://127.0.0.1:18080/healthz
 ```
 
-For an immediate rollback, use the retained image without rebuilding it. This restores the exact application image even when base-image tags have changed. Use the same project directory and `.env`:
+For an immediate rollback between 1.3+ deployments, use both retained images without rebuilding it. This restores the exact application image even when base-image tags have changed. Use the same project directory and `.env`:
 
 ```sh
 DATE_WHEEL_ROLLBACK_FILE=$(mktemp)
@@ -151,8 +158,10 @@ cat > "$DATE_WHEEL_ROLLBACK_FILE" <<'YAML'
 services:
   frontend:
     image: date-wheel:rollback
+  api:
+    image: date-wheel-api:rollback
 YAML
-docker compose -f compose.yaml -f "$DATE_WHEEL_ROLLBACK_FILE" up -d --no-build --pull never --wait --wait-timeout 90 frontend
+docker compose -f compose.yaml -f "$DATE_WHEEL_ROLLBACK_FILE" up -d --no-build --pull never
 docker compose ps
 docker compose logs --tail=100
 ```
@@ -187,4 +196,12 @@ Copy the contents of `dist/` to `/var/www/date-wheel/dist/` on the host. Adapt [
 - **Port is already in use:** set a free loopback port in `.env` (`APP_PORT=18081`), then run `docker compose up -d` and update the upstream in the existing Nginx virtual host.
 - **The domain returns 502:** confirm the container is healthy and the proxy points to the same loopback port from `.env`.
 - **The page is old after an update:** request `/index.html` and confirm its `Cache-Control` is `no-cache, no-store, must-revalidate`; hashed files under `/assets/` are safe to cache immutably.
-- **Build needs a refreshed Nginx base image:** run `docker compose build --pull frontend` and then `docker compose up -d`.
+- **Build needs a refreshed Nginx base image:** run `docker compose build --pull` and then `docker compose up -d`.
+
+## Optional Telegram API (1.3.0)
+
+The existing localhost frontend port stays unchanged. Frontend Nginx forwards `/api/*` to `api:8000` on the Compose network; the API publishes no host port. Only the API receives `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. Empty values disable delivery. There is one unprivileged, read-only API process with a 192 MB limit, healthcheck, bounded logs, and restart policy. No host Nginx changes are needed for `date.benjiro.ir`.
+
+Follow [Telegram setup](../api/README.md). Deploy/update both images together with `docker compose up -d --build`; inspect `docker compose ps` and `docker compose logs --tail=100 api`. `curl -f http://127.0.0.1:18080/api/status` reports availability, while the existing `/healthz` stays a frontend health endpoint. API health is monitored internally at `/healthz`. For rollback, restore the previous approved Git commit in a clean checkout and rebuild both services. If rolling back to a frontend-only release, stop **only this project's** API service first (`docker compose stop api`) before switching; leave other services untouched. No data volume needs migration.
+
+Static-only deployments remain supported. Without an API proxy the optional Telegram action is unavailable. To use Telegram without Docker, run the documented API bound to 127.0.0.1:8000 under your normal process supervisor and add a dedicated `/api/` proxy in this project's vhost. Forward `Host $http_host`, limit request bodies to 2k, disable access logs for that location, and set a 10s proxy read timeout. Always validate `nginx -t` before reloading.
