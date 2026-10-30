@@ -19,16 +19,16 @@ def test_seed_persists_edits_and_does_not_reseed(tmp_path):
     connection = sqlite3.connect(path)
     initialize(connection)
     assert connection.execute('SELECT count(*) FROM activities').fetchone()[0] == initial_count - 1
-    assert connection.execute('PRAGMA user_version').fetchone()[0] == 2
+    assert connection.execute('PRAGMA user_version').fetchone()[0] == 3
     connection.close()
 
 
 def test_newer_database_is_rejected(tmp_path):
     connection = sqlite3.connect(tmp_path / 'data.sqlite3')
-    connection.execute('PRAGMA user_version = 3')
+    connection.execute('PRAGMA user_version = 4')
     with pytest.raises(RuntimeError, match='newer'):
         initialize(connection)
-    assert connection.execute('PRAGMA user_version').fetchone()[0] == 3
+    assert connection.execute('PRAGMA user_version').fetchone()[0] == 4
     connection.close()
 
 
@@ -79,16 +79,17 @@ def test_version_one_upgrade_preserves_all_application_data(tmp_path):
     with connection:
         connection.execute('DROP TABLE admin_sessions')
         connection.execute('DROP TABLE admin_login_budget')
+        connection.execute('ALTER TABLE activities DROP COLUMN archived')
         connection.execute('PRAGMA user_version=1')
         connection.execute("UPDATE activities SET title='عنوان حفظ‌شده', enabled=0 WHERE id='cafe'")
         connection.execute("UPDATE settings SET value='true' WHERE key='halloween_enabled'")
-    before = connection.execute('SELECT * FROM activities ORDER BY id').fetchall()
+    before = [(*row, 0) for row in connection.execute('SELECT * FROM activities ORDER BY id').fetchall()]
     memberships = connection.execute('SELECT * FROM activity_moods ORDER BY activity_id, mood_id').fetchall()
     initialize(connection)
     assert connection.execute('SELECT * FROM activities ORDER BY id').fetchall() == before
     assert connection.execute('SELECT * FROM activity_moods ORDER BY activity_id, mood_id').fetchall() == memberships
     assert connection.execute('SELECT value FROM settings').fetchone()[0] == 'true'
-    assert connection.execute('PRAGMA user_version').fetchone()[0] == 2
+    assert connection.execute('PRAGMA user_version').fetchone()[0] == 3
     assert connection.execute('SELECT count(*) FROM admin_sessions').fetchone()[0] == 0
     initialize(connection)
     assert connection.execute('SELECT * FROM activities ORDER BY id').fetchall() == before
@@ -99,6 +100,7 @@ def test_failed_version_two_upgrade_is_atomic(tmp_path):
     connection = connect_database(tmp_path / 'upgrade.sqlite3')
     with connection:
         connection.execute('DROP TABLE admin_sessions')
+        connection.execute('ALTER TABLE activities DROP COLUMN archived')
         connection.execute('PRAGMA user_version=1')
         connection.execute("UPDATE activities SET title='حفظ شود' WHERE id='cafe'")
     with pytest.raises(sqlite3.OperationalError):
@@ -107,4 +109,23 @@ def test_failed_version_two_upgrade_is_atomic(tmp_path):
     assert connection.execute("SELECT title FROM activities WHERE id='cafe'").fetchone()[0] == 'حفظ شود'
     assert connection.execute("SELECT name FROM sqlite_master WHERE name='admin_sessions'").fetchone() is None
     assert connection.execute("SELECT name FROM sqlite_master WHERE name='admin_login_budget'").fetchone() is not None
+    connection.close()
+
+
+def test_version_two_upgrade_adds_archive_without_changing_records_or_sessions(tmp_path):
+    connection = connect_database(tmp_path / 'upgrade.sqlite3')
+    with connection:
+        connection.execute('ALTER TABLE activities DROP COLUMN archived')
+        connection.execute('PRAGMA user_version=2')
+        connection.execute("UPDATE activities SET title='ویرایش قبلی', enabled=0 WHERE id='cafe'")
+        connection.execute("INSERT INTO admin_sessions VALUES ('hash', 'credential-version', 100, 200)")
+    before = connection.execute('SELECT * FROM activities ORDER BY id').fetchall()
+    initialize(connection)
+    assert connection.execute('SELECT * FROM activities ORDER BY id').fetchall() == [(*row, 0) for row in before]
+    assert connection.execute('SELECT * FROM admin_sessions').fetchall() == [('hash', 'credential-version', 100, 200)]
+    assert connection.execute('PRAGMA user_version').fetchone()[0] == 3
+    with connection:
+        connection.execute("UPDATE activities SET archived=1 WHERE id='cafe'")
+    initialize(connection)
+    assert connection.execute("SELECT archived FROM activities WHERE id='cafe'").fetchone()[0] == 1
     connection.close()

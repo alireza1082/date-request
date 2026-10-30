@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 
 CATALOG_PATH = Path(__file__).resolve().parents[1] / 'src/data/catalog.json'
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 BUSY_TIMEOUT_MS = 5000
 
 
@@ -51,9 +51,12 @@ def initialize(connection: sqlite3.Connection) -> None:
                 for activity_id in mood['activities']:
                     connection.execute('INSERT INTO activity_moods VALUES (?, ?)', (activity_id, mood['id']))
             connection.execute('INSERT INTO settings VALUES (?, ?)', ('halloween_enabled', 'false'))
-        connection.execute('CREATE TABLE admin_sessions (token_hash TEXT PRIMARY KEY, credential_version TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)')
-        connection.execute('CREATE INDEX admin_sessions_expiry ON admin_sessions(expires_at)')
-        connection.execute('CREATE TABLE admin_login_budget (id INTEGER PRIMARY KEY CHECK(id=1), remaining REAL NOT NULL, updated_at REAL NOT NULL)')
+        if version < 2:
+            connection.execute('CREATE TABLE admin_sessions (token_hash TEXT PRIMARY KEY, credential_version TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)')
+            connection.execute('CREATE INDEX admin_sessions_expiry ON admin_sessions(expires_at)')
+            connection.execute('CREATE TABLE admin_login_budget (id INTEGER PRIMARY KEY CHECK(id=1), remaining REAL NOT NULL, updated_at REAL NOT NULL)')
+        if version < 3:
+            connection.execute('ALTER TABLE activities ADD COLUMN archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0, 1))')
         connection.execute(f'PRAGMA user_version = {SCHEMA_VERSION}')
         connection.commit()
     except Exception:
@@ -61,14 +64,15 @@ def initialize(connection: sqlite3.Connection) -> None:
         raise
 
 
-def list_active_activities(connection: sqlite3.Connection) -> list[dict]:
+def list_activities(connection: sqlite3.Connection, *, include_inactive: bool = False) -> list[dict]:
     """Read activities and memberships in one snapshot, with deterministic ties."""
-    rows = connection.execute('''
+    condition = '' if include_inactive else 'WHERE a.enabled = 1 AND a.archived = 0'
+    rows = connection.execute(f'''
         SELECT a.id, a.title, a.wheel_label, a.description, a.suggestion,
-               a.icon, a.emoji, a.color, a.ink, a.sort_order, m.mood_id
+               a.icon, a.emoji, a.color, a.ink, a.sort_order, m.mood_id, a.enabled, a.archived
         FROM activities AS a
         LEFT JOIN activity_moods AS m ON m.activity_id = a.id
-        WHERE a.enabled = 1
+        {condition}
         ORDER BY a.sort_order, a.id, m.mood_id
     ''').fetchall()
     activities = {}
@@ -78,6 +82,21 @@ def list_active_activities(connection: sqlite3.Connection) -> list[dict]:
             activities[activity_id] = dict(zip(
                 ('id', 'title', 'wheelLabel', 'description', 'suggestion', 'icon', 'emoji', 'color', 'ink', 'sortOrder'), row[:10]))
             activities[activity_id]['moods'] = []
+            if include_inactive:
+                activities[activity_id]['enabled'] = bool(row[11])
+                activities[activity_id]['archived'] = bool(row[12])
         if row[10] is not None:
             activities[activity_id]['moods'].append(row[10])
     return list(activities.values())
+
+
+def list_active_activities(connection: sqlite3.Connection) -> list[dict]:
+    return list_activities(connection)
+
+
+def notification_activity(connection: sqlite3.Connection, activity_id: str, mood: str):
+    return connection.execute('''
+        SELECT a.title, a.suggestion FROM activities AS a
+        JOIN activity_moods AS m ON m.activity_id = a.id
+        WHERE a.id = ? AND m.mood_id = ? AND a.enabled = 1 AND a.archived = 0
+    ''', (activity_id, mood)).fetchone()

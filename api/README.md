@@ -1,6 +1,6 @@
 # Optional Telegram notifications · 1.3.0
 
-The browser posts a consented result to `/api/notify`. FastAPI validates it against the shared activity/mood catalog and sends a plain-text Telegram `sendMessage` to **one server-configured chat**. A success response requires Telegram HTTP 200, `ok: true`, and a message ID. It means Telegram accepted the message, not that the owner read it. No real Telegram requests are made by automated tests.
+The browser posts a consented result to `/api/notify`. FastAPI validates it against the active SQLite activity/mood catalog and sends a plain-text Telegram `sendMessage` to **one server-configured chat**. A success response requires Telegram HTTP 200, `ok: true`, and a message ID. It means Telegram accepted the message, not that the owner read it. No real Telegram requests are made by automated tests.
 
 ## Configure later
 
@@ -19,7 +19,7 @@ Telegram reference: [Bot API / sendMessage](https://core.telegram.org/bots/api#s
 - Public results are client reports, not independently verified spins. The API accepts only catalog IDs in the selected mood, an optional 52-character title, literal boolean consent, and a UUID v4 submission key. It rejects extra fields and bodies above 2 KB. It never accepts message bodies or chat destinations.
 - No IP, browser, cookie, device ID, greeting, or tracking data is sent to Telegram. API and internal proxy access logging are disabled. The host's existing access logging is controlled separately by its administrator.
 - One API worker uses a global 12-request bucket refilling at one request per 5 seconds, at most two outbound requests, and at most 512 duplicate records expiring after 10 minutes. No visitor identifiers are retained. These limits deliberately apply across visitors; scripted abuse can exhaust availability, but cannot forward arbitrary text or choose destinations.
-- Identical accepted submission IDs return the previous acceptance without sending again. Conflicting IDs and concurrent repeats return 409. Failed delivery allows retry. A timeout can occur after Telegram accepted a message, so exactly-once delivery cannot be guaranteed. Restarting the API clears rate and duplicate state; do not run multiple workers or replicas with this in-memory design.
+- For activities still selectable in the requested mood, identical accepted submission IDs return the previous acceptance without sending again. Conflicting IDs and concurrent repeats return 409. Failed delivery allows retry. A timeout can occur after Telegram accepted a message, so exactly-once delivery cannot be guaranteed. Restarting the API clears rate and duplicate state; do not run multiple workers or replicas with this in-memory design.
 - Outbound HTTP has an 8-second overall bound and 7-second I/O timeout. Public errors omit Telegram responses and credentials. The endpoint has no CORS allowance and rejects other browser origins; that does not authenticate a public API.
 - Missing configuration returns availability false and POST 503. A stopped API returns proxy failure; the UI disables notification gracefully. Other application features remain functional.
 
@@ -35,7 +35,7 @@ Production uses Python 3.13, one Uvicorn process, a persistent SQLite catalog, n
 
 ## SQLite integration milestone (1.4.0 in progress)
 
-This milestone adds storage startup and `GET /api/catalog` only. React and `/api/notify` still use the existing bundled catalog; notification behavior is unchanged. Admin editing and switching the frontend/notification validation to a dynamic catalog are future milestones. Do not enable catalog editing before those consumers are synchronized.
+A1 added storage startup and `GET /api/catalog`. A3 below adds authenticated editing and moves `/api/notify` validation/message copy to the persistent catalog. React still uses the bundled catalog and its live-data integration remains a later milestone; stale frontend selections that are no longer active in SQLite are rejected with 422 rather than substituted.
 
 FastAPI's lifespan creates the database parent directory if missing, opens the existing storage connection, initializes/validates the schema, then closes the connection on shutdown (including failed HTTP-client startup). Startup fails if the configured path is unwritable, an unversioned database is populated, or the schema version is newer than supported. There is no replacement database or hardcoded catalog fallback. SQLite operations run in the API's async event-loop thread; do not pass the connection to worker threads.
 
@@ -80,7 +80,7 @@ Run `python -m pytest api -q` in the development venv for focused startup, persi
 
 ## A2: single-admin authentication (1.4.0 in development)
 
-Authentication is disabled with generic HTTP 503 responses when configuration is missing or invalid; public wheel/catalog/Telegram endpoints continue to work. No admin UI or content-editing API is included. Credentials are read at API startup and reach only the API container.
+Authentication is disabled with generic HTTP 503 responses when configuration is missing or invalid; public wheel/catalog/Telegram endpoints continue to work. A2 provides no admin UI; A3 adds the protected activity APIs documented below. Credentials are read at API startup and reach only the API container.
 
 Configure these ignored `.env` values for Compose:
 
@@ -126,3 +126,69 @@ Direct local Uvicorn may use `ADMIN_ORIGIN=http://127.0.0.1:4173` plus the expli
 - If cookies are missing, inspect HTTPS and host/path matching in browser tools. Do not print or copy cookie values into logs. Secure cookies will not work over plain HTTP.
 
 Focused tests use temporary databases, fake credentials and mocked Telegram; no real Telegram messages are sent. Design references: [OWASP session guidance](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html), [OWASP CSRF guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html), and [Python scrypt](https://docs.python.org/3/library/hashlib.html#hashlib.scrypt).
+
+## A3: persistent activity management (1.4.0 in development)
+
+All routes below are under `/api/admin`. Reads use `require_admin`; writes use `require_admin_mutation` plus the existing middleware protection. Log in using A2, obtain the session-bound CSRF token, and send both `X-CSRF-Token` and the exact configured `Origin` on writes. The 2 KB request limit remains in effect. Responses are never cached. No admin UI, history, campaign settings, or new release is introduced here.
+
+| Method | Route | Response |
+| --- | --- | --- |
+| GET | `/api/admin/activities` | `{"activities":[...]}` including disabled and archived records |
+| POST | `/api/admin/activities` | 201 with created activity |
+| GET | `/api/admin/activities/{id}` | Activity object, including disabled/archived flags |
+| PATCH | `/api/admin/activities/{id}` | Updated activity object |
+| POST | `/api/admin/activities/reorder` | `{"activities":[...]}` after transactional reorder |
+| DELETE | `/api/admin/activities/{id}` | 204; archive and disable, preserving ID and memberships |
+| GET | `/api/admin/icons` | `{"icons":[{"id":"cafe","label":"فنجان قهوه","category":"خوراکی و کافه"}, ...]}` |
+
+### Activity requests and responses
+
+Example create request (all text is plain UTF-8, not HTML):
+
+```json
+{
+  "id": "quiet-cafe",
+  "title": "یک کافهٔ دنج",
+  "wheelLabel": "کافهٔ دنج",
+  "description": "یه میز کنار پنجره پیدا کنیم.",
+  "suggestion": "هر کدوم یه نوشیدنی تازه امتحان کنین.",
+  "icon": "cafe",
+  "color": "#9d5862",
+  "moods": ["calm"],
+  "enabled": true
+}
+```
+
+ID is 1–32 lowercase ASCII letters/digits with optional single hyphens between groups, starting with a letter. IDs are immutable and reserved even after archival; duplicate creation returns 409. Title is 1–80 characters, `wheelLabel` 1–14, description 1–240, and suggestion 1–160. Whitespace-only, markup delimiters, control characters, bidi overrides and invalid UTF-8 are rejected. Input is trimmed; Persian letters, normal punctuation and ZWNJ are preserved. Unknown fields are rejected, including client-supplied `emoji` and `ink`.
+
+`moods` must be a nonempty unique subset of `surprise`, `calm`, `outdoor`. Surprise membership is explicit, not automatically added to every new activity. `enabled` defaults to true and must be a JSON boolean. Optional `sortOrder` is an integer 0–10000; omission/null on creation appends after the highest non-archived order. If append would exceed 10000, reorder first. PATCH accepts any nonempty subset of editable fields, `sortOrder`, and `archived`, but never `id` or null values. The complete merged record is validated before writing.
+
+Admin activity responses contain the A1 fields (`id`, `title`, `wheelLabel`, `description`, `suggestion`, `icon`, `emoji`, `color`, `ink`, `sortOrder`, `moods`) plus `enabled` and `archived` booleans. Missing records return 404. Invalid schemas/fields return generic 422, storage/configuration conflicts 409, and unavailable storage 503. Mutations are parameterized SQL inside `BEGIN IMMEDIATE`; failures roll back the activity and all memberships together.
+
+### Local icons and color tokens
+
+The approved icon IDs are **cafe, cinema, ice-cream, dinner, breakfast, walk, picnic, bookshop, museum, bowling**. These are the ten actual keys in the existing bundled `artworkById`, not invented library names. The icon endpoint supplies Persian labels/categories for a future picker. Emoji is derived server-side from that icon. No uploaded SVG, arbitrary HTML, URL, or remote icon source is accepted. A regression test compares the whitelist to the actual existing artwork registry.
+
+Color tokens retain the existing hex representation. Allowed values are `#9d5862`, `#6a6984`, `#e3a280`, `#e0ac73`, `#dfbd83`, `#5d765f`, `#577571`, `#765f7c`, `#925b58`, `#836943`. Uppercase hex is normalized to lowercase. `ink` is derived from the original palette's light/dark setting to preserve label contrast; clients cannot override it. The frontend still resolves current postcard artwork using its static activity IDs; using persisted `icon` for new activity IDs belongs to the later frontend integration.
+
+### Ordering, availability, and archival
+
+Reads sort by `sort_order`, then stable ID; duplicate order numbers are deterministic. Reorder takes `{"ids":[...]}` containing **every non-archived ID exactly once**, including disabled drafts, in the desired order. It normalizes those positions to 0..N-1. Missing, stale, archived, unknown or duplicate IDs reject the whole operation; archived rows retain their previous order. At most 40 non-archived records are allowed so the complete ID list fits the existing 2 KB limit. Archiving a draft can free a slot without deleting its ID.
+
+Every mutation checks the resulting configuration before commit: **each of the three moods must retain 2–10 enabled, non-archived activities**. Two matches the wheel engine's minimum; ten limits label density to the existing visual design. Creating/enabling an eleventh visible option, removing a second-to-last option, or removing its last necessary membership returns 409 and rolls back. Create a disabled draft or replace membership/availability first when a mood is full. This policy applies to the persisted catalog; it does not substitute bundled activities.
+
+DELETE is idempotent for an existing archived record. It sets `archived=true`, `enabled=false`; rows and memberships remain stored and never reseed on restart. PATCH `{"archived":false}` restores a disabled draft; add `"enabled":true` in that same request if desired and the constraints permit it. An archived activity cannot be enabled without restoring it. Lists include archived records so future UI can restore them.
+
+### Live public catalog and Telegram
+
+`GET /api/catalog` retains the exact A1 response schema and reads SQLite on every call. Only enabled/non-archived activities appear; top-level mood lists reflect their current memberships and order. Admin-only flags never appear publicly. No restart or frontend build is needed for **API** changes. A database read error or an externally corrupted wheel configuration returns the existing generic 503, never a hardcoded fallback. Direct database writes bypass the API safeguards and are unsupported outside controlled backup/repair procedures.
+
+`POST /api/notify` retains its request schema, explicit consent requirement, response on acceptance, fixed server-side destination, timeouts and existing rate/duplicate limits. Activity existence, enabled/archive state and requested mood are now checked against SQLite. Message title/suggestion come from the selected stored row, so new admin-created activity IDs work without an API restart. Invalid, disabled, archived or mismatched selections return generic 422; database read failure returns generic 503. Automated tests mock Telegram and never send real messages.
+
+**Live frontend synchronization is not complete in A3.** The existing React wheel, labels and postcard components still load bundled content. A later milestone must consume `/api/catalog` and resolve illustrations by the approved `icon` field. Editing a visible option now may cause an old static client's selection to be rejected by notification validation. There is no silent fallback to stale static content in the API.
+
+### Schema 3 and validation
+
+The transaction from schema 2 to **3** adds only `activities.archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0,1))`. Existing activity IDs, copy, ordering, memberships, settings and sessions are preserved. Empty databases still seed once, then apply migrations; archived rows never cause reseeding. Older binaries reject schema 3: use the existing backup/rollback procedure and a matching pre-upgrade backup in a separate volume, never downgrade in place. The API Dockerfile only adds the required Python modules; Nginx, Compose ports, persistent volume and resource limits are unchanged.
+
+Run `.venv/bin/python -m pytest api -q` from the repository root. Focused coverage includes auth/CSRF, CRUD, archive/restore, ordering, palette/icon validation, minimum/maximum counts, transactional rollback, persisted edits, migration preservation and mocked Telegram compatibility. No frontend visual suite is needed for this backend-only milestone.

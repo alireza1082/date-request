@@ -13,15 +13,15 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 import sqlite3
 
+from api.activities import install_activity_routes
 from api.auth import AdminAuth, Credentials, install_admin_auth
-from api.catalog import CatalogResponse
-from api.storage import connect_database, list_active_activities
+from api.catalog import CatalogResponse, validate_wheel_configuration
+from api.storage import connect_database, list_active_activities, notification_activity
 
 CATALOG = json.loads((Path(__file__).resolve().parents[1] / 'src/data/catalog.json').read_text())
-ACTIVITIES = {item['id']: item for item in CATALOG['activities']}
 MOODS = {item['id']: item for item in CATALOG['moods']}
 
 
@@ -46,11 +46,6 @@ class Notification(BaseModel):
         # Plain text only, one line. Never Telegram HTML/Markdown.
         return re.sub(r'[\x00-\x1f\x7f\u202a-\u202e\u2066-\u2069]', ' ', value).strip()
 
-    @model_validator(mode='after')
-    def allowed_activity(self):
-        if self.activity_id not in MOODS[self.mood]['activities']:
-            raise ValueError('Activity is not in the selected mood')
-        return self
 
 
 def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, database_path=None, admin_clock=time.time):
@@ -81,6 +76,8 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, d
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(_request, _error):
+        if _request.url.path.startswith("/api/admin/activities"):
+            return JSONResponse({"detail": "Invalid activity request."}, status_code=422)
         if _request.url.path.startswith("/api/admin/"):
             return JSONResponse({"detail": "Invalid authentication request."}, status_code=422)
         return JSONResponse({'detail': 'Invalid notification request.'}, status_code=422)
@@ -127,7 +124,8 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, d
     async def catalog():
         try:
             activities = list_active_activities(app.state.database)
-        except sqlite3.Error:
+            validate_wheel_configuration(activities)
+        except (sqlite3.Error, ValueError):
             raise HTTPException(503, 'Activity catalog is unavailable.') from None
         return {
             'activities': activities,
@@ -139,6 +137,12 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, d
 
     @app.post('/api/notify')
     async def notify(data: Notification):
+        try:
+            activity = notification_activity(app.state.database, data.activity_id, data.mood)
+        except sqlite3.Error:
+            raise HTTPException(503, 'Activity catalog is unavailable.') from None
+        if activity is None:
+            raise HTTPException(422, 'Invalid notification request.')
         if not configured:
             raise HTTPException(503, 'Notifications are unavailable.')
         now = clock()
@@ -155,11 +159,10 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, d
         if len(submissions) >= 512 or slots.locked():
             raise HTTPException(429, 'Please try again later.')
         submissions[data.submission_id] = (now + 600, payload, 'pending')
-        activity = ACTIVITIES[data.activity_id]
         title = data.invitation_title or 'یه قرارِ کوچولو'
         message = (f'🎡 یه نفر گردونه رو چرخوند!\n\n💌 دعوت‌نامه: {title}\n'
-                   f'🎯 نتیجه: {activity["title"]}\n🌷 حال‌وهوا: {MOODS[data.mood]["label"]}\n\n'
-                   f'✨ پیشنهاد کوچولو:\n{activity["suggestion"]}\n\n(نتیجهٔ اعلام‌شده توسط فرستنده)')
+                   f'🎯 نتیجه: {activity[0]}\n🌷 حال‌وهوا: {MOODS[data.mood]["label"]}\n\n'
+                   f'✨ پیشنهاد کوچولو:\n{activity[1]}\n\n(نتیجهٔ اعلام‌شده توسط فرستنده)')
         try:
             async with slots, asyncio.timeout(8):
                 response = await app.state.telegram.post(
@@ -174,6 +177,7 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, d
         submissions[data.submission_id] = (clock() + 600, payload, 'sent')
         return {'accepted': True}
 
+    install_activity_routes(app)
     install_admin_auth(app)
     return app
 

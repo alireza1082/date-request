@@ -33,3 +33,14 @@ class CatalogResponse(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     activities: list[CatalogActivity]
     moods: list[CatalogMood]
+
+
+MIN_MOOD_ACTIVITIES = 2
+MAX_MOOD_ACTIVITIES = 10
+
+
+def validate_wheel_configuration(activities: list[dict]) -> None:
+    for mood in ('surprise', 'calm', 'outdoor'):
+        count = sum(mood in activity['moods'] for activity in activities)
+        if not MIN_MOOD_ACTIVITIES <= count <= MAX_MOOD_ACTIVITIES:
+            raise ValueError('Each mood must contain between 2 and 10 active activities.')
