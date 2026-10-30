@@ -45,6 +45,22 @@ test("admin can create, icon-edit, preview, and reorder a wheel option", async (
   await page.route("**/api/admin/auth/me", (route) => route.fulfill({ status: authenticated ? 200 : 401, json: { authenticated } }));
   await page.route("**/api/admin/auth/login", async (route) => { authenticated = true; await route.fulfill({ json: { authenticated: true } }); });
   await page.route("**/api/admin/auth/logout", async (route) => { authenticated = false; await route.fulfill({ json: { authenticated: false } }); });
+  await page.route("**/api/admin/history/stats", (route) => route.fulfill({ json: {
+    reported_events: true, timezone: "UTC", retention_days: 90, total_spins: 0, today_spins: 0,
+    last_7_days: 0, most_selected: [], mood_distribution: { surprise: 0, calm: 0, outdoor: 0 },
+    invitation_spins: 0, telegram: { not_sent: 0, attempted: 0, accepted: 0, failed: 0 },
+  } }));
+  await page.route("**/api/admin/settings", (route) => route.fulfill({ json: {
+    halloween_enabled: false, halloween_title: "عنوان دعوت", halloween_subtitle: "متن دعوت",
+    halloween_cta: "بزن بریم", halloween_note: "",
+  } }));
+  await page.route("**/api/admin/telegram/diagnostics", (route) => route.fulfill({ json: {
+    api_operational: true, configured: false, bot_token_configured: false, destination_configured: false,
+    bot_validation: "not_checked", bot_validated_at: null, validation_error: null,
+    last_successful_acceptance: null, last_failed_attempt: null, last_failure_summary: null,
+    success_count: 0, failure_count: 0, last_test_at: null, read_by_recipient: null,
+    delivery_semantics: "Acceptance only.",
+  } }));
   await page.route("**/api/admin/icons", (route) => route.fulfill({ json: { icons: [
     { id: "cafe", label: "فنجان قهوه", category: "خوراکی و کافه" },
     { id: "museum", label: "موزه", category: "فرهنگ" },

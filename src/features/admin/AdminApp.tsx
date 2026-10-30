@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { AdminApiError, getAdminCsrf, getAdminSession, loginAdmin, logoutAdmin } from "./admin-api";
 import { ActivityManagement } from "./ActivityManagement";
+import { AdminOverview } from "./AdminOverview";
+import { HistoryManagement } from "./HistoryManagement";
+import { AdminSettings } from "./AdminSettings";
 import "./admin.css";
+import "./admin-reports.css";
 
 type AuthState = "checking" | "login" | "ready" | "unavailable";
 type AdminSection = "overview" | "activities" | "history" | "settings";
@@ -135,7 +139,6 @@ export function AdminApp() {
           aria-current={section === item.id ? "page" : undefined}
           onClick={() => setSection(item.id)}>
           <span className="admin-nav-glyph" aria-hidden="true">{item.glyph}</span><span>{item.label}</span>
-          {(item.id === "history" || item.id === "settings") && <span className="admin-nav-soon">به‌زودی</span>}
         </button>)}</nav>
         <div className="admin-sidebar-note"><span>✳</span><p>هر انتخاب کوچک،<br />یک خاطرهٔ تازه می‌سازه.</p></div>
       </aside>
@@ -143,13 +146,10 @@ export function AdminApp() {
         <div className="admin-page-heading"><div><p className="admin-kicker">پنل صاحب چرخ</p><h1>{sections.find((item) => item.id === section)?.label}</h1></div>
           <a className="admin-public-link" href="/">دیدن تجربهٔ عمومی <span aria-hidden="true">↗</span></a></div>
         {error && <p className="admin-alert" role="status">{error}</p>}
-        {section === "overview" ? <section className="admin-welcome-card">
-          <span className="admin-welcome-ornament" aria-hidden="true">✳</span>
-          <p className="admin-kicker">همه‌چیز برای یک قرار خوب</p>
-          <h2>از اینجا، چرخِ قرارها رو بچین.</h2>
-          <p>قرارها، حال‌وهوا و سورپرایزهای فصلی رو اینجا مدیریت می‌کنی. بخش‌های پنل به‌تدریج در دسترس قرار می‌گیرن.</p>
-          <div className="admin-welcome-seal"><span>DATE<br />WHEEL</span><b>✦</b></div>
-        </section> : section === "activities" ? <ActivityManagement /> : <section className="admin-welcome-card admin-soon-card"><p className="admin-kicker">در حال آماده‌سازی</p><h2>این بخش به‌زودی آماده می‌شه.</h2><p>فعلاً می‌تونی تجربهٔ عمومی چرخ رو ببینی.</p><a className="admin-primary admin-link-button" href="/">رفتن به چرخ</a></section>}
+        {section === "overview" ? <AdminOverview onNavigate={setSection} />
+          : section === "activities" ? <ActivityManagement />
+            : section === "history" ? <HistoryManagement />
+              : <AdminSettings />}
       </main>
     </div>
     <nav className="admin-mobile-nav" aria-label="پیمایش پنل مدیریت">{sections.map((item) => <button key={item.id} type="button"
