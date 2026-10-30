@@ -19,6 +19,7 @@ import sqlite3
 from api.activities import install_activity_routes
 from api.auth import AdminAuth, Credentials, install_admin_auth
 from api.catalog import CatalogResponse, validate_wheel_configuration
+from api.settings import install_settings_routes
 from api.storage import connect_database, list_active_activities, notification_activity
 
 CATALOG = json.loads((Path(__file__).resolve().parents[1] / 'src/data/catalog.json').read_text())
@@ -76,6 +77,8 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, d
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(_request, _error):
+        if _request.url.path.startswith("/api/admin/settings"):
+            return JSONResponse({"detail": "Invalid settings request."}, status_code=422)
         if _request.url.path.startswith("/api/admin/activities"):
             return JSONResponse({"detail": "Invalid activity request."}, status_code=422)
         if _request.url.path.startswith("/api/admin/"):
@@ -177,6 +180,7 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, d
         submissions[data.submission_id] = (clock() + 600, payload, 'sent')
         return {'accepted': True}
 
+    install_settings_routes(app)
     install_activity_routes(app)
     install_admin_auth(app)
     return app

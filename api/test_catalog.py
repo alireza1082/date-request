@@ -56,7 +56,7 @@ def test_restarts_preserve_edits_memberships_order_and_disabled_state(tmp_path):
 def test_startup_rejects_newer_schema_without_replacing_data(tmp_path):
     path = tmp_path / 'newer.sqlite3'
     connection = sqlite3.connect(path)
-    connection.execute('PRAGMA user_version=4')
+    connection.execute('PRAGMA user_version=5')
     connection.execute('CREATE TABLE keep (value TEXT)')
     connection.execute("INSERT INTO keep VALUES ('original')")
     connection.commit()
@@ -65,7 +65,7 @@ def test_startup_rejects_newer_schema_without_replacing_data(tmp_path):
         with TestClient(create_app(database_path=path)):
             pass
     connection = sqlite3.connect(path)
-    assert connection.execute('PRAGMA user_version').fetchone()[0] == 4
+    assert connection.execute('PRAGMA user_version').fetchone()[0] == 5
     assert connection.execute('SELECT value FROM keep').fetchone()[0] == 'original'
     connection.close()
 

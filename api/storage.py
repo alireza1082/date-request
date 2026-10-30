@@ -3,8 +3,10 @@ import json
 import sqlite3
 from pathlib import Path
 
+from api.seasonal_defaults import DEFAULTS
+
 CATALOG_PATH = Path(__file__).resolve().parents[1] / 'src/data/catalog.json'
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 BUSY_TIMEOUT_MS = 5000
 
 
@@ -57,6 +59,8 @@ def initialize(connection: sqlite3.Connection) -> None:
             connection.execute('CREATE TABLE admin_login_budget (id INTEGER PRIMARY KEY CHECK(id=1), remaining REAL NOT NULL, updated_at REAL NOT NULL)')
         if version < 3:
             connection.execute('ALTER TABLE activities ADD COLUMN archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0, 1))')
+        if version < 4:
+            connection.executemany('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', [(key, str(value).lower() if isinstance(value, bool) else value) for key, value in DEFAULTS.items()])
         connection.execute(f'PRAGMA user_version = {SCHEMA_VERSION}')
         connection.commit()
     except Exception:
