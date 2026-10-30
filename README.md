@@ -54,8 +54,9 @@ The browser suite verifies the visible segment under the pointer, rapid-click pr
 src/
   app/                         Page composition and focus restoration
   data/
-    activities.ts              Persian activity copy and suggestions
-    moods.ts                   Mood labels and curated activity pools
+    catalog-api.ts             Runtime catalog contract and validation
+    catalog.json               Initial SQLite seed data and palette
+    moods.ts                   Stable mood IDs and invitation validation
   features/
     invitations/               URL codec, greeting, composer, sharing
     results/                    Postcard preview, SVG artwork, canvas export
@@ -67,11 +68,11 @@ src/
 e2e/                             Playwright interaction and viewport tests
 ```
 
-`wheel-engine.ts` owns segment geometry, unbiased selection with `crypto.getRandomValues`, rotation normalization, and final pointer alignment. `useWheelSpin` selects one index and passes it through animation to the result state; the wheel and result use that same selection. `moods.ts` selects a local pool before the spin, so each visible segment remains equally likely. `invitation-codec.ts` validates a versioned payload with a 52-character title, 100-character greeting, and 900-character URL limit. Imported text is rendered safely as text. Postcard PNGs are composed locally after the bundled Persian font loads and use no remote assets.
+`wheel-engine.ts` owns segment geometry, unbiased selection with `crypto.getRandomValues`, rotation normalization, and final pointer alignment. `useWheelSpin` selects one index and passes it through animation to the result state; the wheel and result use that same selection. The public app validates the runtime `/api/catalog` response and refreshes it before a spin; the selected activity array is frozen for that spin and its result card. `invitation-codec.ts` validates a versioned payload with a 52-character title, 100-character greeting, and 900-character URL limit. Imported text is rendered safely as text. Postcard PNGs are composed locally after the bundled Persian font loads and use no remote assets.
 
 ## Activities and moods
 
-Edit `src/data/catalog.json`. Keep each ID unique and `wheelLabel` concise; the surprise wheel has ten equal-size segments, while the calm and outdoor pools have five each. Add every activity's illustration to `src/features/results/activity-artwork-data.ts` and its mood membership to the same catalog. Each activity includes a result title, description, short suggestion, share emoji, segment color, and label contrast setting. Tests check label contrast and segment alignment after pool changes.
+Manage live activities from `/admin` using the approved icon and color catalogs. Changes persist in SQLite and apply to the next public wheel load/spin without a frontend rebuild. `src/data/catalog.json` is only the initial database seed and shared palette reference; do not edit it to manage production activities. Every approved icon has a local illustration used in result cards and PNG postcards. The API enforces 2–10 active choices per mood.
 
 ## Invitations and privacy
 
@@ -85,15 +86,15 @@ The result sheet includes a **ذخیره کارت** action for a crisp PNG and *
 
 Docker Compose is the recommended deployment. It binds the unprivileged Nginx container to `127.0.0.1:18080`; add the documented location snippet to an existing VPS Nginx HTTPS virtual host. Start with [deploy/README.md](deploy/README.md).
 
-For direct static hosting, run `pnpm install --frozen-lockfile` and `pnpm build`, then serve `dist/` using [deploy/nginx-static.conf.example](deploy/nginx-static.conf.example). No backend or runtime API is required. The bundled font makes no external font request.
+For direct static asset hosting, run `pnpm install --frozen-lockfile` and `pnpm build`, then serve `dist/` using [deploy/nginx-static.conf.example](deploy/nginx-static.conf.example). The React app still requires the FastAPI service at the same-origin `/api/` path for its live catalog and settings; the example proxies that path to a localhost-only API. The bundled font makes no external font request.
 
 ## Version 1.3.0
 
 Normal visits open a paper invitation intro; personalized links retain their greeting and skip the extra intro. Wheel labels use centered, continuous Persian SVG text without negative letter spacing, outlines, or glyph shadows. The selection engine is unchanged.
 
-Activity copy, mood membership, and Telegram allowlists share `src/data/catalog.json`. Keep that catalog authoritative when editing options. Invitation results include an explicit optional Telegram action; it sends only activity ID, mood, optional title, consent, and a short-lived idempotency key. It never sends the greeting or visitor metadata. **All invitations use the site owner's fixed Telegram destination**, including invitations created by other visitors; this is stated next to the action.
+The SQLite catalog is authoritative at runtime; `src/data/catalog.json` seeds a new database and defines the approved color palette. Invitation results include an explicit optional Telegram action; it sends only activity ID, mood, optional title, consent, and a short-lived idempotency key. It never sends the greeting or visitor metadata. **All invitations use the site owner's fixed Telegram destination**, including invitations created by other visitors; this is stated next to the action.
 
-Run the optional API from the repository root:
+Run the API from the repository root (the public wheel requires it for the dynamic catalog; Telegram credentials remain optional):
 
 ```sh
 python3 -m venv .venv
@@ -105,8 +106,8 @@ pnpm dev
 .venv/bin/python -m pytest api -q
 ```
 
-Vite proxies `/api` to localhost:8000. No credentials are needed for development; notification availability is false until both backend variables are configured. If the API is offline, the existing wheel, PNG, and sharing features still work. See [Telegram setup and operations](api/README.md). No secrets belong in `VITE_` variables.
+Vite proxies `/api` to localhost:8000. No Telegram credentials are needed for development; notification availability is false until both backend variables are configured. If the API is offline, the public app shows a retryable catalog error rather than using stale bundled options. See [Telegram setup and operations](api/README.md). No secrets belong in `VITE_` variables.
 
 ### Backend SQLite milestone (1.4.0 in progress)
 
-The API initializes a persistent SQLite catalog, settings, history, and Telegram diagnostics during lifespan startup. Compose stores it in a named volume; local Uvicorn defaults to ignored `data/date-wheel.sqlite3`, configurable through `DATABASE_PATH`. `/admin` provides secure login, an activity editor and shared wheel preview, a recorded-history view with filters, an overview of consented events, Halloween copy controls, and Telegram diagnostics/test actions. Admin activity changes persist through the API; the public wheel is still on the bundled catalog until the dynamic-catalog milestone. See [backend setup and API notes](api/README.md). Version 1.4.0 remains in development.
+The API initializes a persistent SQLite catalog, settings, history, and Telegram diagnostics during lifespan startup. Compose stores it in a named volume; local Uvicorn defaults to ignored `data/date-wheel.sqlite3`, configurable through `DATABASE_PATH`. `/admin` provides secure login, an activity editor and shared wheel preview, a recorded-history view with filters, an overview of consented events, Halloween copy controls, and Telegram diagnostics/test actions. The public wheel now consumes `/api/catalog`; each new spin fetches fresh data and freezes its own result snapshot. Catalog errors never fall back to stale bundled activities. See [backend setup and API notes](api/README.md). Version 1.4.0 remains in development.

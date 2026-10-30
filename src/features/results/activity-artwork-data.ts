@@ -13,6 +13,10 @@ const artworkById: Readonly<Record<string, string>> = {
   bowling: `<path d="M56 67c-8 0-14 9-14 22s6 21 14 21 14-8 14-21-6-22-14-22Zm24-8c-8 0-14 9-14 22s6 22 14 22 14-9 14-22-6-22-14-22Zm24 8c-8 0-14 9-14 22s6 21 14 21 14-8 14-21-6-22-14-22Z" fill="#fff9f0" stroke="ACCENT" stroke-width="4"/><path d="M49 82h14m10-5h14m10 5h14" stroke="#bc7772" stroke-width="4"/><circle cx="80" cy="124" r="15" fill="#d89183" stroke="ACCENT" stroke-width="4"/><circle cx="75" cy="120" r="2.5" fill="#fff9f0"/><circle cx="84" cy="119" r="2.5" fill="#fff9f0"/><circle cx="80" cy="128" r="2.5" fill="#fff9f0"/>`,
 };
 
+export function hasLocalActivityIcon(iconId: string): boolean {
+  return Object.prototype.hasOwnProperty.call(artworkById, iconId);
+}
+
 export function getIconArtworkSvg(iconId: string, color: string): string {
   const illustration = artworkById[iconId];
   if (!illustration) throw new RangeError(`No local illustration is defined for ${iconId}.`);

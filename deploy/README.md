@@ -188,7 +188,7 @@ pnpm install --frozen-lockfile
 pnpm build
 ```
 
-Copy the contents of `dist/` to `/var/www/date-wheel/dist/` on the host. Adapt [`nginx-static.conf.example`](nginx-static.conf.example) for the host's domain and existing HTTPS setup. It includes SPA fallback, a lightweight health endpoint, no-cache HTML, and immutable caching for Vite's hashed assets.
+Copy the contents of `dist/` to `/var/www/date-wheel/dist/` on the host. Adapt [`nginx-static.conf.example`](nginx-static.conf.example) for the host's domain and existing HTTPS setup. It includes SPA fallback, a lightweight health endpoint, no-cache HTML, immutable caching for Vite's hashed assets, and a same-origin `/api/` proxy. The React app requires FastAPI for its live catalog; run the API bound to `127.0.0.1:8000` (or change the upstream in the example). Do not expose the API port publicly. Docker Compose remains the recommended deployment.
 
 ## Troubleshooting
 
@@ -210,4 +210,4 @@ Static-only deployments remain supported. Without an API proxy the optional Tele
 
 The API mounts the `sqlite_data` named volume at `/app/data` while retaining its read-only root filesystem and non-root UID 65534. The configured database is `/app/data/date-wheel.sqlite3`. API port exposure and frontend port 18080 are unchanged. On a new volume Docker copies the image directory's ownership; if an existing volume has incompatible ownership, startup fails rather than replacing it. Inspect and back up that volume before manually correcting permissions.
 
-Validate the catalog with `curl -f http://127.0.0.1:18080/api/catalog`. Startup/seeding is transactional, versioned, and repeatable; recreation retains data when the same Compose project/volume is used. Follow [SQLite backup and rollback instructions](../api/README.md#persistence-backups-and-rollback) before upgrades. Do not delete the named volume on stop, update, or rollback. This is a backend milestone, not a 1.4.0 release; the frontend and Telegram notification catalog remain unchanged pending their own integration.
+Validate the catalog with `curl -f http://127.0.0.1:18080/api/catalog`. Startup/seeding is transactional, versioned, and repeatable; recreation retains data when the same Compose project/volume is used. The public frontend reads this database-backed catalog dynamically and refreshes it before each spin; admin changes appear without rebuilding the frontend. Follow [SQLite backup and rollback instructions](../api/README.md#persistence-backups-and-rollback) before upgrades. Do not delete the named volume on stop, update, or rollback. Version 1.4.0 remains in development.

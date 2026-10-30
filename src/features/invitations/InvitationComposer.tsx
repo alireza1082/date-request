@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import type { MoodId } from "../../data/moods";
+import type { MoodId, MoodOption } from "../../data/moods";
 import { createInvitationUrl, MAX_INVITATION_GREETING_LENGTH, MAX_INVITATION_TITLE_LENGTH } from "./invitation-codec";
 import { MoodSelector } from "./MoodSelector";
 import { shareInvitationLink, type InvitationShareOutcome } from "./share-invitation";
@@ -9,6 +9,7 @@ interface InvitationComposerProps {
   readonly open: boolean;
   readonly defaultMood: MoodId;
   readonly onClose: () => void;
+  readonly moodOptions?: readonly MoodOption[];
 }
 
 const shareMessages: Readonly<Record<Exclude<InvitationShareOutcome, "cancelled">, string>> = {
@@ -17,7 +18,7 @@ const shareMessages: Readonly<Record<Exclude<InvitationShareOutcome, "cancelled"
   failed: "کپی لینک انجام نشد؛ می‌تونی لینک رو دستی انتخاب کنی.",
 };
 
-export function InvitationComposer({ open, defaultMood, onClose }: InvitationComposerProps) {
+export function InvitationComposer({ open, defaultMood, onClose, moodOptions }: InvitationComposerProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
@@ -108,7 +109,7 @@ export function InvitationComposer({ open, defaultMood, onClose }: InvitationCom
             placeholder="مثلاً: دلم یه عصر آروم با تو می‌خواد."
           />
           <label>حال‌وهوای قرار</label>
-          <MoodSelector value={mood} onChange={setMood} compact />
+          <MoodSelector value={mood} onChange={setMood} compact {...(moodOptions ? { options: moodOptions } : {})} />
           <p className="invitation-privacy">متن دعوت داخل خودِ لینک قرار می‌گیره؛ هرکسی لینک رو دریافت کنه می‌تونه اون رو ببینه. اسم یا اطلاعات خصوصی ننویس.</p>
           <button className="button button-primary create-invitation" type="submit">ساخت لینک دعوت <span aria-hidden="true">✦</span></button>
         </form>

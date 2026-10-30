@@ -11,6 +11,7 @@ interface DateWheelProps {
   readonly activities: readonly Activity[];
   readonly rotation: number;
   readonly isSpinning: boolean;
+  readonly isPreparing?: boolean;
   readonly hasResult: boolean;
   readonly wheelRef: RefObject<HTMLDivElement | null>;
   readonly spinButtonRef: RefObject<HTMLButtonElement | null>;
@@ -36,7 +37,7 @@ function segmentPath(start: number, end: number): string {
   ].join(" ");
 }
 
-export function DateWheel({ activities, rotation, isSpinning, hasResult, wheelRef, spinButtonRef, onSpin }: DateWheelProps) {
+export function DateWheel({ activities, rotation, isSpinning, isPreparing = false, hasResult, wheelRef, spinButtonRef, onSpin }: DateWheelProps) {
   const settledRotation = normalizeDegrees(rotation);
 
   return (
@@ -99,13 +100,13 @@ export function DateWheel({ activities, rotation, isSpinning, hasResult, wheelRe
           className="hub-button"
           type="button"
           onClick={onSpin}
-          disabled={isSpinning}
-          aria-label={isSpinning ? "چرخ در حال چرخیدن است" : "چرخ را بچرخان"}
-          aria-busy={isSpinning}
+          disabled={isSpinning || isPreparing}
+          aria-label={isPreparing ? "در حال آماده‌کردن چرخ" : isSpinning ? "چرخ در حال چرخیدن است" : "چرخ را بچرخان"}
+          aria-busy={isSpinning || isPreparing}
           aria-describedby="wheel-instructions"
         >
           <span className="hub-heart" aria-hidden="true">♥</span>
-          <span>{isSpinning ? "دارم می‌چرخم" : "بچرخون"}</span>
+          <span>{isPreparing ? "یه لحظه…" : isSpinning ? "دارم می‌چرخم" : "بچرخون"}</span>
         </button>
         <div className="wheel-bolts" aria-hidden="true">
           {Array.from({ length: 12 }, (_, index) => (

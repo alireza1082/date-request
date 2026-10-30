@@ -1,4 +1,18 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
+
+interface CatalogSeed {
+  readonly activities: readonly { readonly id: string; readonly title: string; readonly wheelLabel: string; readonly description: string; readonly suggestion: string; readonly emoji: string; readonly color: string; readonly ink: "light" | "dark" }[];
+  readonly moods: readonly { readonly id: "surprise" | "calm" | "outdoor"; readonly label: string; readonly note: string; readonly activities: readonly string[] }[];
+}
+const catalogSeed = JSON.parse(readFileSync(new URL("../src/data/catalog.json", import.meta.url), "utf8")) as CatalogSeed;
+const apiCatalog = {
+  activities: catalogSeed.activities.map((activity, sortOrder) => ({
+    ...activity, icon: activity.id, sortOrder,
+    moods: catalogSeed.moods.filter((mood) => mood.activities.includes(activity.id)).map((mood) => mood.id),
+  })),
+  moods: catalogSeed.moods,
+};
 
 async function enterWheel(page: Page) {
   await page.getByRole("button", { name: "بزن بریم!" }).click();
@@ -27,6 +41,7 @@ async function inspectWheelLanding(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
+  await page.context().route("**/api/catalog", (route) => route.fulfill({ headers: { "Cache-Control": "no-store" }, json: apiCatalog }));
   await page.addInitScript(() => {
     const testWindow = window as Window & { __wheelDrawCount?: number; __sharedMessage?: string };
     testWindow.__wheelDrawCount = 0;
@@ -310,6 +325,60 @@ test("keeps mood choices locked during a spin and responds immediately to reduce
   await expect(page.getByRole("dialog")).toBeVisible({ timeout: 3000 });
   const landing = await inspectWheelLanding(page);
   expect(landing.visibleSegmentId).toBe(landing.resultId);
+});
+
+test("uses the latest server catalog on a later spin and freezes segments in flight", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let serverCatalog = structuredClone(apiCatalog);
+  await page.route("**/api/catalog", (route) => route.fulfill({ headers: { "Cache-Control": "no-store" }, json: serverCatalog }));
+  await page.goto("/");
+  await enterWheel(page);
+  await expect(page.locator('[data-wheel-segment="cafe"]')).toHaveAttribute("data-wheel-title", "کافه‌گردی");
+  await page.screenshot({ path: "test-results/public-wheel-mobile.png", fullPage: true, animations: "disabled" });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({ path: "test-results/public-wheel-desktop.png", fullPage: true, animations: "disabled" });
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  await page.locator(".hub-button").click();
+  await expect(page.locator(".hub-button")).toBeDisabled();
+  const editedCatalog = structuredClone(apiCatalog);
+  const cafe = editedCatalog.activities.find((activity) => activity.id === "cafe");
+  if (!cafe) throw new Error("The seeded cafe activity is missing.");
+  cafe.title = "کافه زیر بارون";
+  cafe.wheelLabel = "کافهٔ بارونی";
+  cafe.description = "یک جای گرم، یک پنجرهٔ بارانی و کمی وقتِ دونفره.";
+  serverCatalog = editedCatalog;
+
+  await expect(page.locator('[data-wheel-segment="cafe"]')).toHaveAttribute("data-wheel-title", "کافه‌گردی");
+  await page.getByRole("dialog").waitFor({ state: "visible", timeout: 15_000 });
+  await page.screenshot({ path: "test-results/public-wheel-result-mobile.png", fullPage: true, animations: "disabled" });
+  const firstLanding = await inspectWheelLanding(page);
+  expect(firstLanding.visibleSegmentId).toBe(firstLanding.resultId);
+  await page.getByRole("button", { name: /قبوله، بریم/ }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
+
+  await page.locator(".hub-button").click();
+  await expect(page.locator('[data-wheel-segment="cafe"]')).toHaveAttribute("data-wheel-title", "کافه زیر بارون");
+  await expect(page.locator(".hub-button")).toBeDisabled();
+  await page.getByRole("dialog").waitFor({ state: "visible", timeout: 15_000 });
+  const secondLanding = await inspectWheelLanding(page);
+  expect(secondLanding.visibleSegmentId).toBe(secondLanding.resultId);
+  if (secondLanding.resultId === "cafe") expect(secondLanding.resultTitle).toBe("کافه زیر بارون");
+});
+
+test("does not fall back to bundled options when the catalog fails and offers retry", async ({ page }) => {
+  let available = false;
+  await page.route("**/api/catalog", (route) => available
+    ? route.fulfill({ json: apiCatalog })
+    : route.fulfill({ status: 503, json: { detail: "Activity catalog is unavailable." } }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "بزن بریم!" }).click();
+  await expect(page.getByRole("heading", { name: "فعلاً به فهرست قرارها نمی‌رسیم" })).toBeVisible();
+  await expect(page.locator(".hub-button")).toHaveCount(0);
+  available = true;
+  await page.getByRole("button", { name: /دوباره تلاش کن/ }).click();
+  await expect(page.locator(".hub-button")).toBeVisible();
+  await expect(page.locator("[data-wheel-segment]")).toHaveCount(10);
 });
 
 

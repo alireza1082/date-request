@@ -35,7 +35,7 @@ Production uses Python 3.13, one Uvicorn process, a persistent SQLite catalog, n
 
 ## SQLite integration milestone (1.4.0 in progress)
 
-A1 added storage startup and `GET /api/catalog`. A3 below adds authenticated editing and moves `/api/notify` validation/message copy to the persistent catalog. React still uses the bundled catalog and its live-data integration remains a later milestone; stale frontend selections that are no longer active in SQLite are rejected with 422 rather than substituted.
+A1 added storage startup and `GET /api/catalog`. A3 added authenticated editing and moved `/api/notify` validation/message copy to the persistent catalog. The current React app loads and validates `GET /api/catalog` at runtime. It never falls back to an outdated bundled activity list if the API is unavailable; it shows a retryable error instead.
 
 FastAPI's lifespan creates the database parent directory if missing, opens the existing storage connection, initializes/validates the schema, then closes the connection on shutdown (including failed HTTP-client startup). Startup fails if the configured path is unwritable, an unversioned database is populated, or the schema version is newer than supported. There is no replacement database or hardcoded catalog fallback. SQLite operations run in the API's async event-loop thread; do not pass the connection to worker threads.
 
@@ -187,7 +187,7 @@ DELETE is idempotent for an existing archived record. It sets `archived=true`, `
 
 `POST /api/notify` retains its request schema, explicit consent requirement, response on acceptance, fixed server-side destination, timeouts and existing rate/duplicate limits. Activity existence, enabled/archive state and requested mood are now checked against SQLite. Message title/suggestion come from the selected stored row, so new admin-created activity IDs work without an API restart. Invalid, disabled, archived or mismatched selections return generic 422; database read failure returns generic 503. Automated tests mock Telegram and never send real messages.
 
-**Live frontend synchronization is not complete in A3.** The existing React wheel, labels and postcard components still load bundled content. A later milestone must consume `/api/catalog` and resolve illustrations by the approved `icon` field. Editing a visible option now may cause an old static client's selection to be rejected by notification validation. There is no silent fallback to stale static content in the API.
+At the A3 checkpoint the React wheel still used its bundled seed data. The later public integration now makes `/api/catalog` authoritative in the current app: every new spin fetches the latest catalog, validates it, freezes an immutable mood-specific activity snapshot, and uses the same selected activity for pointer alignment and result/postcard content. No catalog data changes during an active spin or while its result dialog is open. The next spin receives newly saved admin edits without rebuilding React. Approved icons resolve to local SVG artwork for the result and postcard. If the API is down or returns malformed/incompatible data, the wheel remains unavailable until a successful retry; it does not silently substitute bundled options.
 
 ### Schema 3 and validation
 
