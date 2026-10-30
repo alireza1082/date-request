@@ -37,6 +37,9 @@ services:
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:-}
+      ADMIN_ORIGIN: ${ADMIN_ORIGIN:-}
       DATABASE_PATH: /app/data/date-wheel.sqlite3
     volumes:
       - sqlite_data:/app/data

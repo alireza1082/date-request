@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 import sqlite3
 
+from api.auth import AdminAuth, Credentials, install_admin_auth
 from api.catalog import CatalogResponse
 from api.storage import connect_database, list_active_activities
 
@@ -52,7 +53,7 @@ class Notification(BaseModel):
         return self
 
 
-def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, database_path=None):
+def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, database_path=None, admin_clock=time.time):
     token = os.getenv('TELEGRAM_BOT_TOKEN', '') if token is None else token
     chat_id = os.getenv('TELEGRAM_CHAT_ID', '') if chat_id is None else chat_id
     configured = bool(token.strip() and chat_id.strip())
@@ -68,6 +69,7 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, d
         database = connect_database(path)
         app.state.database = database
         try:
+            app.state.admin_auth = AdminAuth(await asyncio.to_thread(Credentials.from_environment), admin_clock)
             async with httpx.AsyncClient(timeout=httpx.Timeout(7.0), transport=transport, trust_env=False) as client:
                 app.state.telegram = client
                 yield
@@ -79,6 +81,8 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, d
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(_request, _error):
+        if _request.url.path.startswith("/api/admin/"):
+            return JSONResponse({"detail": "Invalid authentication request."}, status_code=422)
         return JSONResponse({'detail': 'Invalid notification request.'}, status_code=422)
 
     @app.middleware('http')
@@ -170,6 +174,7 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, d
         submissions[data.submission_id] = (clock() + 600, payload, 'sent')
         return {'accepted': True}
 
+    install_admin_auth(app)
     return app
 
 

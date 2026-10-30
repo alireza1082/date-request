@@ -77,3 +77,52 @@ docker compose cp api:/app/data/backup-2026-10-30.sqlite3 ./backups/
 Store the copied backup securely outside Git and verify it with `PRAGMA integrity_check`. Restore only with the API stopped, to an explicitly selected volume, preserving UID/GID 65534 and directory permissions. Preserve the original volume until restoration is verified. Do not downgrade a schema in place: an older application that rejects a newer schema requires the matching pre-upgrade backup in a separate volume. Rolling back to the frontend-only 1.3 backend leaves this volume intact but unused. This milestone does not perform any deployment or automated restoration.
 
 Run `python -m pytest api -q` in the development venv for focused startup, persistence, catalog, migration, and existing Telegram contract tests. Each backend test receives its own temporary database through `api/conftest.py`.
+
+## A2: single-admin authentication (1.4.0 in development)
+
+Authentication is disabled with generic HTTP 503 responses when configuration is missing or invalid; public wheel/catalog/Telegram endpoints continue to work. No admin UI or content-editing API is included. Credentials are read at API startup and reach only the API container.
+
+Configure these ignored `.env` values for Compose:
+
+- `ADMIN_PASSWORD`: 14–128 characters, at least eight distinct characters, and at least three of lowercase/uppercase/digits/symbols. Alternatively use a passphrase of at least 20 characters and four words (same distinct-character minimum). Maximum UTF-8 length is 512 bytes. There is no default password.
+- `ADMIN_SESSION_SECRET`: a stable, randomly generated URL-safe secret, 43–256 characters with at least 16 distinct characters. Generate one with `python3 -c "import secrets; print(secrets.token_urlsafe(48))"` in your private terminal and store it in `.env` or your normal secret manager. Do not regenerate it during deployments. Never put it in Vite variables, Git, logs, or chat.
+- `ADMIN_ORIGIN`: the exact external HTTPS origin, e.g. `https://date.benjiro.ir`, without a trailing slash or path. Origin validation uses this configured value, not Host or arbitrary forwarded headers. TLS must be enforced by the existing host Nginx; the internal API remains unexposed. Do not enable HTTP access to the production admin origin.
+
+Restart/recreate only the API after changing these values. The password is verified with scrypt (`N=32768, r=8, p=3`, approximately 32 MiB working memory), a secret-derived domain-separated salt, and constant-time digest comparison. Only the derived key remains in the auth object; the deployment environment necessarily retains the configured password. Verification runs in a worker thread with at most one KDF running per API process. No plaintext password is stored in SQLite or included in response/validation errors.
+
+### SPA login and CSRF flow
+
+All requests below are same-origin, with cookies included. There are no redirects or CORS grants.
+
+1. `GET /api/admin/auth/csrf` obtains `{"csrf_token":"…"}` and a short-lived, signed, HttpOnly login-challenge cookie. GET may omit Origin; if supplied it must match. Cross-site Fetch Metadata is rejected. The response is unreadable to other origins under the same-origin policy.
+2. `POST /api/admin/auth/login` sends JSON `{"password":"…"}`, the exact `Origin`, and `X-CSRF-Token` from step 1. The challenge cookie and header must match and be less than five minutes old. Login CSRF verification also applies to JSON requests. Invalid credentials return generic 401, invalid/missing CSRF or Origin 403, schema errors 422, oversized bodies 413, and throttling 429 with `Retry-After: 60`.
+3. Success returns only `{"authenticated":true}` and sets the session cookie. It deletes the login-challenge cookie and always generates a new session token. To log in again while already authenticated, log out first.
+4. `GET /api/admin/auth/me` returns `{"authenticated":true}` for a valid session; absent, expired, revoked, or tampered sessions return generic 401. It never returns the session ID, hashes, credentials, or expiry details.
+5. After login, call `GET /api/admin/auth/csrf` again to obtain the **session-bound** CSRF token. Keep it in SPA memory. Send it as `X-CSRF-Token`, plus the configured `Origin`, on every authenticated mutation.
+6. `POST /api/admin/auth/logout` requires that session-bound token and Origin. It deletes the server-side session and clears the cookie, returning `{"authenticated":false}`. A copied old cookie no longer authenticates. Repeated logout without a session returns 401.
+
+All admin responses have `Cache-Control: no-store` and `Pragma: no-cache`. Session tokens are 32 random bytes and are sent only through HttpOnly cookies, never JSON. Production uses host-only `__Host-datewheel-admin` and `__Host-datewheel-login` cookies: Secure, SameSite=Strict, Path=/, no Domain. The browser cannot expose the session cookie to JavaScript. Session CSRF tokens are separate, domain-separated HMAC values bound to the session hash and server secret. Login challenge cookies are signed; simply copying an arbitrary cookie value into the header cannot pass validation.
+
+### Future protected routes
+
+Use `Depends(require_admin)` imported from `api.auth` for read-only routes, and `Depends(require_admin_mutation)` for state-changing routes. Both are async dependencies; SQLite stays on the API event-loop thread. The latter validates the session, exact Origin, and session-bound CSRF header. A middleware guard also enforces authentication/CSRF for unsafe methods under `/api/admin/`, except login which has its own challenge protection. Future GET routes still need the read dependency. Admin request bodies are currently limited to 2 KB, matching internal Nginx; any future size change must update both limits deliberately. Never mutate state in a GET endpoint.
+
+### Sessions, migration, and throttling
+
+Schema **2** adds only `admin_sessions` (HMAC of token, credential version, server timestamps) and a singleton `admin_login_budget` table plus an expiry index. The version-1-to-2 migration is atomic and never reseeds or modifies activity/settings/history rows. A new empty database is initialized with the original catalog before adding these auth tables. Unsupported newer schemas still fail startup. Back up before upgrading: the earlier A1 binary rejects schema 2, so rollback needs the matching backup in a separate volume, never an in-place downgrade.
+
+Sessions expire absolutely after eight hours. Expired sessions are removed during validation/login; state is bounded to 32 active sessions, revoking the oldest as needed. Restart/recreation preserves sessions when the SQLite volume, password, and secret stay unchanged. Changing either password or secret invalidates prior sessions. Successful login replaces any presented old session. The database contains neither raw session tokens nor CSRF tokens. Revocation is immediate on logout.
+
+The global login bucket allows five initial attempts and refills one attempt per minute. Every login POST counts, including malformed or CSRF-rejected attempts, to bound work. The single SQLite row survives restarts and does not grow with clients. X-Forwarded-For and visitor identifiers are not used or retained. There is no permanent lockout, but sustained public abuse can consume the shared budget; an owner must wait for a refill. Do not scale this application to multiple API workers without reviewing the existing Telegram limits and KDF concurrency guard.
+
+### Local development and troubleshooting
+
+Direct local Uvicorn may use `ADMIN_ORIGIN=http://127.0.0.1:4173` plus the explicit **local-process-only** variable `ADMIN_ALLOW_INSECURE_LOCAL=true`. It permits non-Secure cookies only for localhost/127.0.0.1/::1 origins and uses distinct local cookie names. Compose deliberately does not forward this override. Otherwise HTTPS is required even in development. `.env` is not automatically loaded by Uvicorn; export the variables through your local secret manager. Never use the insecure override on a deployed server.
+
+- 503: check all three settings privately, password/secret strength, origin syntax, and restart the API. Public status does not reveal admin configuration details.
+- 401: the session may have expired, been logged out, or become invalid after credential rotation. Obtain a fresh login challenge and log in.
+- 403: obtain the correct CSRF token for the current login/session and send the exact configured Origin. Ensure the browser uses the public HTTPS hostname and sends cookies. A login CSRF token cannot be used for logout or another session.
+- 429: wait at least the indicated interval. Restarting does not reset the SQLite login budget.
+- If cookies are missing, inspect HTTPS and host/path matching in browser tools. Do not print or copy cookie values into logs. Secure cookies will not work over plain HTTP.
+
+Focused tests use temporary databases, fake credentials and mocked Telegram; no real Telegram messages are sent. Design references: [OWASP session guidance](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html), [OWASP CSRF guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html), and [Python scrypt](https://docs.python.org/3/library/hashlib.html#hashlib.scrypt).
