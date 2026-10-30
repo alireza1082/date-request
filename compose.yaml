@@ -37,6 +37,9 @@ services:
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      DATABASE_PATH: /app/data/date-wheel.sqlite3
+    volumes:
+      - sqlite_data:/app/data
     restart: unless-stopped
     mem_limit: 192m
     pids_limit: 64
@@ -56,3 +59,6 @@ services:
       options:
         max-size: "5m"
         max-file: "2"
+
+volumes:
+  sqlite_data:

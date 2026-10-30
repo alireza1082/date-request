@@ -22,3 +22,8 @@ test-results
 __pycache__
 .pytest_cache
 api/test_*.py
+api/conftest.py
+data
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm

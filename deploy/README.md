@@ -9,7 +9,7 @@ Internet → existing VPS Nginx → 127.0.0.1:18080
                               → /api/* → internal FastAPI :8000 → Telegram
 ```
 
-Compose publishes only on IPv4 loopback. It does not take over ports 80 or 443 and adds an internal API with no host port. Telegram credentials are optional and reach only that API. No database or volume is needed.
+Compose publishes only on IPv4 loopback. It does not take over ports 80 or 443 and adds an internal API with no host port. Telegram credentials are optional and reach only that API. The API catalog now uses a project-scoped SQLite volume; no database service container is needed.
 
 ## Requirements
 
@@ -101,7 +101,7 @@ docker compose build --pull && docker compose up -d
 docker compose down
 ```
 
-Use the last build command when you want to fetch a newer base image before rebuilding. `down` removes this project's container and network; it does not remove images or volumes. There are no application data volumes to preserve.
+Use the last build command when you want to fetch a newer base image before rebuilding. `down` removes this project's container and network; it does not remove images or volumes. The SQLite catalog volume must be preserved; never add `-v` to this command.
 
 ## Nginx reverse proxy
 
@@ -202,6 +202,12 @@ Copy the contents of `dist/` to `/var/www/date-wheel/dist/` on the host. Adapt [
 
 The existing localhost frontend port stays unchanged. Frontend Nginx forwards `/api/*` to `api:8000` on the Compose network; the API publishes no host port. Only the API receives `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. Empty values disable delivery. There is one unprivileged, read-only API process with a 192 MB limit, healthcheck, bounded logs, and restart policy. No host Nginx changes are needed for `date.benjiro.ir`.
 
-Follow [Telegram setup](../api/README.md). Deploy/update both images together with `docker compose up -d --build`; inspect `docker compose ps` and `docker compose logs --tail=100 api`. `curl -f http://127.0.0.1:18080/api/status` reports availability, while the existing `/healthz` stays a frontend health endpoint. API health is monitored internally at `/healthz`. For rollback, restore the previous approved Git commit in a clean checkout and rebuild both services. If rolling back to a frontend-only release, stop **only this project's** API service first (`docker compose stop api`) before switching; leave other services untouched. No data volume needs migration.
+Follow [Telegram setup](../api/README.md). Deploy/update both images together with `docker compose up -d --build`; inspect `docker compose ps` and `docker compose logs --tail=100 api`. `curl -f http://127.0.0.1:18080/api/status` reports availability, while the existing `/healthz` stays a frontend health endpoint. API health is monitored internally at `/healthz`. For rollback, restore the previous approved Git commit in a clean checkout and rebuild both services. If rolling back to a frontend-only release, stop **only this project's** API service first (`docker compose stop api`) before switching; leave other services untouched. Preserve the SQLite catalog volume across recreation; see the SQLite milestone notes in the API README.
 
 Static-only deployments remain supported. Without an API proxy the optional Telegram action is unavailable. To use Telegram without Docker, run the documented API bound to 127.0.0.1:8000 under your normal process supervisor and add a dedicated `/api/` proxy in this project's vhost. Forward `Host $http_host`, limit request bodies to 2k, disable access logs for that location, and set a 10s proxy read timeout. Always validate `nginx -t` before reloading.
+
+## SQLite integration milestone (1.4.0 in progress)
+
+The API mounts the `sqlite_data` named volume at `/app/data` while retaining its read-only root filesystem and non-root UID 65534. The configured database is `/app/data/date-wheel.sqlite3`. API port exposure and frontend port 18080 are unchanged. On a new volume Docker copies the image directory's ownership; if an existing volume has incompatible ownership, startup fails rather than replacing it. Inspect and back up that volume before manually correcting permissions.
+
+Validate the catalog with `curl -f http://127.0.0.1:18080/api/catalog`. Startup/seeding is transactional, versioned, and repeatable; recreation retains data when the same Compose project/volume is used. Follow [SQLite backup and rollback instructions](../api/README.md#persistence-backups-and-rollback) before upgrades. Do not delete the named volume on stop, update, or rollback. This is a backend milestone, not a 1.4.0 release; the frontend and Telegram notification catalog remain unchanged pending their own integration.

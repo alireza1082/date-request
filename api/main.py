@@ -14,6 +14,10 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+import sqlite3
+
+from api.catalog import CatalogResponse
+from api.storage import connect_database, list_active_activities
 
 CATALOG = json.loads((Path(__file__).resolve().parents[1] / 'src/data/catalog.json').read_text())
 ACTIVITIES = {item['id']: item for item in CATALOG['activities']}
@@ -48,7 +52,7 @@ class Notification(BaseModel):
         return self
 
 
-def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic):
+def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, database_path=None):
     token = os.getenv('TELEGRAM_BOT_TOKEN', '') if token is None else token
     chat_id = os.getenv('TELEGRAM_CHAT_ID', '') if chat_id is None else chat_id
     configured = bool(token.strip() and chat_id.strip())
@@ -59,9 +63,17 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic):
 
     @asynccontextmanager
     async def lifespan(app):
-        async with httpx.AsyncClient(timeout=httpx.Timeout(7.0), transport=transport, trust_env=False) as client:
-            app.state.telegram = client
-            yield
+        path = Path(database_path if database_path is not None else os.getenv('DATABASE_PATH', 'data/date-wheel.sqlite3'))
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        database = connect_database(path)
+        app.state.database = database
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(7.0), transport=transport, trust_env=False) as client:
+                app.state.telegram = client
+                yield
+        finally:
+            database.close()
+            app.state.database = None
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -106,6 +118,20 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic):
     @app.get('/api/status')
     async def status():
         return {'notifications_available': configured}
+
+    @app.get('/api/catalog', response_model=CatalogResponse)
+    async def catalog():
+        try:
+            activities = list_active_activities(app.state.database)
+        except sqlite3.Error:
+            raise HTTPException(503, 'Activity catalog is unavailable.') from None
+        return {
+            'activities': activities,
+            'moods': [
+                {**mood, 'activities': [item['id'] for item in activities if mood['id'] in item['moods']]}
+                for mood in CATALOG['moods']
+            ],
+        }
 
     @app.post('/api/notify')
     async def notify(data: Notification):

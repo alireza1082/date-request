@@ -1,6 +1,6 @@
 # چرخِ قرار · Date Wheel
 
-A tiny Persian interactive surprise for choosing a date together. The React application supports static hosting. An optional small FastAPI service sends consented results to one configured Telegram chat; there is no database or account system.
+A tiny Persian interactive surprise for choosing a date together. The React application supports static hosting. An optional small FastAPI service sends consented results to one configured Telegram chat; its API also maintains a persistent SQLite activity catalog. There is no account system.
 
 **Version:** 1.3.0
 
@@ -106,3 +106,7 @@ pnpm dev
 ```
 
 Vite proxies `/api` to localhost:8000. No credentials are needed for development; notification availability is false until both backend variables are configured. If the API is offline, the existing wheel, PNG, and sharing features still work. See [Telegram setup and operations](api/README.md). No secrets belong in `VITE_` variables.
+
+### Backend SQLite milestone (1.4.0 in progress)
+
+The API now initializes a persistent SQLite catalog during lifespan startup and exposes read-only `GET /api/catalog`. Compose stores it in a named volume; local Uvicorn defaults to ignored `data/date-wheel.sqlite3`, configurable through `DATABASE_PATH`. The existing frontend and `/api/notify` contract are unchanged. See [storage, response, backup, and rollback notes](api/README.md#sqlite-integration-milestone-140-in-progress). This milestone does not release 1.4.0 or implement admin features.
