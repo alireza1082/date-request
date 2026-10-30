@@ -13,13 +13,21 @@ const artworkById: Readonly<Record<string, string>> = {
   bowling: `<path d="M56 67c-8 0-14 9-14 22s6 21 14 21 14-8 14-21-6-22-14-22Zm24-8c-8 0-14 9-14 22s6 22 14 22 14-9 14-22-6-22-14-22Zm24 8c-8 0-14 9-14 22s6 21 14 21 14-8 14-21-6-22-14-22Z" fill="#fff9f0" stroke="ACCENT" stroke-width="4"/><path d="M49 82h14m10-5h14m10 5h14" stroke="#bc7772" stroke-width="4"/><circle cx="80" cy="124" r="15" fill="#d89183" stroke="ACCENT" stroke-width="4"/><circle cx="75" cy="120" r="2.5" fill="#fff9f0"/><circle cx="84" cy="119" r="2.5" fill="#fff9f0"/><circle cx="80" cy="128" r="2.5" fill="#fff9f0"/>`,
 };
 
-export function getActivityArtworkSvg(activity: Activity): string {
-  const illustration = artworkById[activity.id];
-  if (!illustration) throw new RangeError(`No postcard illustration is defined for ${activity.id}.`);
-  const accent = /^#[0-9a-f]{6}$/i.test(activity.color) ? activity.color : "#995d68";
+export function getIconArtworkSvg(iconId: string, color: string): string {
+  const illustration = artworkById[iconId];
+  if (!illustration) throw new RangeError(`No local illustration is defined for ${iconId}.`);
+  const accent = /^#[0-9a-f]{6}$/i.test(color) ? color : "#995d68";
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160"><circle cx="80" cy="80" r="70" fill="#f7ecdf"/><circle cx="80" cy="80" r="61" fill="none" stroke="#d9bda3" stroke-width="1.5"/><path d="M80 21v7m0 104v7M21 80h7m104 0h7" stroke="#c39675" stroke-width="2" stroke-linecap="round"/><g>${illustration.replaceAll("ACCENT", accent)}</g></svg>`;
 }
 
+export function getActivityArtworkSvg(activity: Activity): string {
+  return getIconArtworkSvg(activity.icon || activity.id, activity.color);
+}
+
+export function getIconArtworkDataUrl(iconId: string, color: string): string {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(getIconArtworkSvg(iconId, color))}`;
+}
+
 export function getActivityArtworkDataUrl(activity: Activity): string {
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(getActivityArtworkSvg(activity))}`;
+  return getIconArtworkDataUrl(activity.icon || activity.id, activity.color);
 }

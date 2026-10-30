@@ -12,4 +12,11 @@ describe("local postcard illustrations", () => {
       expect(getActivityArtworkDataUrl(activity)).toMatch(/^data:image\/svg\+xml;charset=utf-8,/);
     }
   });
+
+  it("resolves newly managed activities by their approved icon, not their new ID", () => {
+    const source = activities[0]!;
+    const newActivity = { ...source, id: "a-new-admin-created-date", icon: "museum" };
+    expect(getActivityArtworkSvg(newActivity)).toContain("<svg xmlns=\"http://www.w3.org/2000/svg\"");
+    expect(getActivityArtworkDataUrl(newActivity)).toMatch(/^data:image\/svg\+xml;charset=utf-8,/);
+  });
 });

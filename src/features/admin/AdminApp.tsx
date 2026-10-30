@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { AdminApiError, getAdminCsrf, getAdminSession, loginAdmin, logoutAdmin } from "./admin-api";
+import { ActivityManagement } from "./ActivityManagement";
 import "./admin.css";
 
 type AuthState = "checking" | "login" | "ready" | "unavailable";
@@ -134,7 +135,7 @@ export function AdminApp() {
           aria-current={section === item.id ? "page" : undefined}
           onClick={() => setSection(item.id)}>
           <span className="admin-nav-glyph" aria-hidden="true">{item.glyph}</span><span>{item.label}</span>
-          {item.id !== "overview" && <span className="admin-nav-soon">به‌زودی</span>}
+          {(item.id === "history" || item.id === "settings") && <span className="admin-nav-soon">به‌زودی</span>}
         </button>)}</nav>
         <div className="admin-sidebar-note"><span>✳</span><p>هر انتخاب کوچک،<br />یک خاطرهٔ تازه می‌سازه.</p></div>
       </aside>
@@ -148,7 +149,7 @@ export function AdminApp() {
           <h2>از اینجا، چرخِ قرارها رو بچین.</h2>
           <p>قرارها، حال‌وهوا و سورپرایزهای فصلی رو اینجا مدیریت می‌کنی. بخش‌های پنل به‌تدریج در دسترس قرار می‌گیرن.</p>
           <div className="admin-welcome-seal"><span>DATE<br />WHEEL</span><b>✦</b></div>
-        </section> : <section className="admin-welcome-card admin-soon-card"><p className="admin-kicker">در حال آماده‌سازی</p><h2>این بخش به‌زودی آماده می‌شه.</h2><p>فعلاً می‌تونی تجربهٔ عمومی چرخ رو ببینی.</p><a className="admin-primary admin-link-button" href="/">رفتن به چرخ</a></section>}
+        </section> : section === "activities" ? <ActivityManagement /> : <section className="admin-welcome-card admin-soon-card"><p className="admin-kicker">در حال آماده‌سازی</p><h2>این بخش به‌زودی آماده می‌شه.</h2><p>فعلاً می‌تونی تجربهٔ عمومی چرخ رو ببینی.</p><a className="admin-primary admin-link-button" href="/">رفتن به چرخ</a></section>}
       </main>
     </div>
     <nav className="admin-mobile-nav" aria-label="پیمایش پنل مدیریت">{sections.map((item) => <button key={item.id} type="button"

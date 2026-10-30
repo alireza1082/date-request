@@ -6,6 +6,7 @@ export interface Activity {
   readonly wheelLabel: string;
   readonly description: string;
   readonly suggestion: string;
+  readonly icon: string;
   readonly emoji: string;
   readonly color: string;
   readonly ink: "light" | "dark";
@@ -13,5 +14,6 @@ export interface Activity {
 
 export const activities: readonly Activity[] = catalog.activities.map((activity) => ({
   ...activity,
+  icon: activity.id,
   ink: activity.ink === "dark" ? "dark" : "light",
 }));
