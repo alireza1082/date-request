@@ -20,6 +20,7 @@ from api.activities import install_activity_routes
 from api.auth import AdminAuth, Credentials, install_admin_auth
 from api.catalog import CatalogResponse, validate_wheel_configuration
 from api.settings import install_settings_routes
+from api.history import cleanup_expired, install_history_routes
 from api.storage import connect_database, list_active_activities, notification_activity
 
 CATALOG = json.loads((Path(__file__).resolve().parents[1] / 'src/data/catalog.json').read_text())
@@ -49,12 +50,19 @@ class Notification(BaseModel):
 
 
 
-def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, database_path=None, admin_clock=time.time):
+def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, database_path=None, admin_clock=time.time, history_retention_days=None):
     token = os.getenv('TELEGRAM_BOT_TOKEN', '') if token is None else token
     chat_id = os.getenv('TELEGRAM_CHAT_ID', '') if chat_id is None else chat_id
     configured = bool(token.strip() and chat_id.strip())
+    try:
+        retention_days = int(os.getenv('HISTORY_RETENTION_DAYS', '90')) if history_retention_days is None else history_retention_days
+    except ValueError:
+        raise ValueError('HISTORY_RETENTION_DAYS must be an integer between 1 and 365') from None
+    if isinstance(retention_days, bool) or not isinstance(retention_days, int) or not 1 <= retention_days <= 365:
+        raise ValueError('HISTORY_RETENTION_DAYS must be an integer between 1 and 365')
     # Bounded global token bucket: no visitor identifiers or IPs are retained.
     budget, updated = 12.0, clock()
+    history_budget, history_updated = 30.0, clock()
     submissions = {}  # id -> (expiry, payload, state); max 512; one API worker only
     slots = asyncio.Semaphore(2)
 
@@ -64,12 +72,22 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, d
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         database = connect_database(path)
         app.state.database = database
+        app.state.history_retention_days = retention_days
+        cleanup_task = None
         try:
+            cleanup_expired(database, retention_days)
+            cleanup_task = asyncio.create_task(history_cleanup_loop(database, retention_days))
             app.state.admin_auth = AdminAuth(await asyncio.to_thread(Credentials.from_environment), admin_clock)
             async with httpx.AsyncClient(timeout=httpx.Timeout(7.0), transport=transport, trust_env=False) as client:
                 app.state.telegram = client
                 yield
         finally:
+            if cleanup_task is not None:
+                cleanup_task.cancel()
+                try:
+                    await cleanup_task
+                except asyncio.CancelledError:
+                    pass
             database.close()
             app.state.database = None
 
@@ -83,23 +101,32 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, d
             return JSONResponse({"detail": "Invalid activity request."}, status_code=422)
         if _request.url.path.startswith("/api/admin/"):
             return JSONResponse({"detail": "Invalid authentication request."}, status_code=422)
+        if _request.url.path.startswith('/api/history'):
+            return JSONResponse({'detail': 'Invalid history request.'}, status_code=422)
         return JSONResponse({'detail': 'Invalid notification request.'}, status_code=422)
 
     @app.middleware('http')
     async def limits(request: Request, call_next):
-        nonlocal budget, updated
-        if request.url.path == '/api/notify':
+        nonlocal budget, updated, history_budget, history_updated
+        if request.url.path in ('/api/notify', '/api/history') and request.method == 'POST':
             now = clock()
-            budget = min(12.0, budget + max(0, now - updated) / 5)
-            updated = now
-            if budget < 1:
-                return JSONResponse({'detail': 'Please try again later.'}, status_code=429, headers={'Retry-After': '5'})
-            budget -= 1
+            if request.url.path == '/api/notify':
+                budget = min(12.0, budget + max(0, now - updated) / 5)
+                updated = now
+                if budget < 1:
+                    return JSONResponse({'detail': 'Please try again later.'}, status_code=429, headers={'Retry-After': '5', 'Cache-Control': 'no-store'})
+                budget -= 1
+            else:
+                history_budget = min(30.0, history_budget + max(0, now - history_updated) / 10)
+                history_updated = now
+                if history_budget < 1:
+                    return JSONResponse({'detail': 'Please try again later.'}, status_code=429, headers={'Retry-After': '10', 'Cache-Control': 'no-store'})
+                history_budget -= 1
             # Bound streamed bodies as well as Content-Length; no request body logs.
             body = bytearray()
             async for chunk in request.stream():
                 if len(body) + len(chunk) > 2048:
-                    return JSONResponse({'detail': 'Request too large.'}, status_code=413)
+                    return JSONResponse({'detail': 'Request too large.'}, status_code=413, headers={'Cache-Control': 'no-store'})
                 body.extend(chunk)
             request._body = bytes(body)
             origin = request.headers.get('origin')
@@ -181,9 +208,21 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, d
         return {'accepted': True}
 
     install_settings_routes(app)
+    install_history_routes(app)
     install_activity_routes(app)
     install_admin_auth(app)
     return app
 
 
 app = create_app()
+
+
+async def history_cleanup_loop(database, retention_days):
+    """Delete at most 500 expired rows hourly; continue in bounded batches."""
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            cleanup_expired(database, retention_days)
+        except sqlite3.Error:
+            # A later scheduled sweep can retry; history submission remains usable.
+            continue

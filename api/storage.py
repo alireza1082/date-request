@@ -6,7 +6,7 @@ from pathlib import Path
 from api.seasonal_defaults import DEFAULTS
 
 CATALOG_PATH = Path(__file__).resolve().parents[1] / 'src/data/catalog.json'
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 BUSY_TIMEOUT_MS = 5000
 
 
@@ -61,6 +61,17 @@ def initialize(connection: sqlite3.Connection) -> None:
             connection.execute('ALTER TABLE activities ADD COLUMN archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0, 1))')
         if version < 4:
             connection.executemany('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', [(key, str(value).lower() if isinstance(value, bool) else value) for key, value in DEFAULTS.items()])
+        if version < 5:
+            # The original spins table was intentionally created with A1. Keep
+            # its rows and add only idempotency/capability and delivery fields.
+            connection.execute('ALTER TABLE spins ADD COLUMN payload_hash TEXT')
+            connection.execute('ALTER TABLE spins ADD COLUMN event_key_hash TEXT')
+            connection.execute("ALTER TABLE spins ADD COLUMN telegram_status TEXT NOT NULL DEFAULT 'not_sent' CHECK(telegram_status IN ('not_sent', 'attempted', 'accepted', 'failed'))")
+            connection.execute('ALTER TABLE spins ADD COLUMN telegram_accepted_at TEXT')
+            connection.execute('CREATE UNIQUE INDEX spins_event_key_hash ON spins(event_key_hash) WHERE event_key_hash IS NOT NULL')
+            connection.execute('CREATE INDEX spins_mood_created ON spins(mood_id, created_at DESC)')
+            connection.execute('CREATE INDEX spins_activity_created ON spins(activity_id, created_at DESC)')
+            connection.execute('CREATE INDEX spins_invitation_created ON spins(invitation_used, created_at DESC)')
         connection.execute(f'PRAGMA user_version = {SCHEMA_VERSION}')
         connection.commit()
     except Exception:

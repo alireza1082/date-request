@@ -40,6 +40,7 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:-}
       ADMIN_ORIGIN: ${ADMIN_ORIGIN:-}
+      HISTORY_RETENTION_DAYS: ${HISTORY_RETENTION_DAYS:-90}
       DATABASE_PATH: /app/data/date-wheel.sqlite3
     volumes:
       - sqlite_data:/app/data

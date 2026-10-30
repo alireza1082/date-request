@@ -49,6 +49,7 @@ def test_schema_three_upgrade_preserves_existing_data_and_adds_only_missing_defa
     path = tmp_path / 'migration.sqlite3'
     database = connect_database(path)
     with database:
+        _downgrade_history(database)
         database.execute("DELETE FROM settings WHERE key != 'halloween_enabled'")
         database.execute("UPDATE settings SET value='true' WHERE key='halloween_enabled'")
         database.execute("INSERT INTO settings VALUES ('halloween_title', 'متن قبلی')")
@@ -56,7 +57,7 @@ def test_schema_three_upgrade_preserves_existing_data_and_adds_only_missing_defa
         database.execute("INSERT INTO admin_sessions VALUES ('hash', 'version', 1, 2)")
         database.execute('PRAGMA user_version=3')
     initialize(database)
-    assert database.execute('PRAGMA user_version').fetchone()[0] == 4
+    assert database.execute('PRAGMA user_version').fetchone()[0] == 5
     rows = dict(database.execute('SELECT key, value FROM settings'))
     assert rows['halloween_enabled'] == 'true' and rows['halloween_title'] == 'متن قبلی'
     assert set(DEFAULTS) <= rows.keys()
@@ -73,6 +74,7 @@ def test_schema_four_migration_rolls_back_on_failure(tmp_path):
 
     database = connect_database(tmp_path / 'failure.sqlite3')
     with database:
+        _downgrade_history(database)
         database.execute("DELETE FROM settings WHERE key != 'halloween_enabled'")
         database.execute('PRAGMA user_version=3')
         database.execute("CREATE TRIGGER fail_settings BEFORE INSERT ON settings WHEN NEW.key='halloween_cta' BEGIN SELECT RAISE(ABORT, 'forced'); END")
@@ -81,6 +83,13 @@ def test_schema_four_migration_rolls_back_on_failure(tmp_path):
     assert database.execute('PRAGMA user_version').fetchone()[0] == 3
     assert database.execute('SELECT key FROM settings').fetchall() == [('halloween_enabled',)]
     database.close()
+
+
+def _downgrade_history(database):
+    for index in ('spins_event_key_hash', 'spins_mood_created', 'spins_activity_created', 'spins_invitation_created'):
+        database.execute(f'DROP INDEX IF EXISTS {index}')
+    for column in ('telegram_accepted_at', 'telegram_status', 'event_key_hash', 'payload_hash'):
+        database.execute(f'ALTER TABLE spins DROP COLUMN {column}')
 
 
 @pytest.mark.parametrize("key", ["halloween_enabled", "halloween_title"])
