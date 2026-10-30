@@ -109,4 +109,4 @@ Vite proxies `/api` to localhost:8000. No credentials are needed for development
 
 ### Backend SQLite milestone (1.4.0 in progress)
 
-The API now initializes a persistent SQLite catalog during lifespan startup and exposes read-only `GET /api/catalog`. Compose stores it in a named volume; local Uvicorn defaults to ignored `data/date-wheel.sqlite3`, configurable through `DATABASE_PATH`. The existing frontend and `/api/notify` contract are unchanged. See [storage, response, backup, and rollback notes](api/README.md#sqlite-integration-milestone-140-in-progress). This milestone does not release 1.4.0 or implement admin features.
+The API initializes a persistent SQLite catalog, settings, history, and Telegram diagnostics during lifespan startup. Compose stores it in a named volume; local Uvicorn defaults to ignored `data/date-wheel.sqlite3`, configurable through `DATABASE_PATH`. The `/admin` route now provides the secure login and responsive admin shell; activity/history/settings screens are being added incrementally. See [backend setup and API notes](api/README.md). Version 1.4.0 remains in development.

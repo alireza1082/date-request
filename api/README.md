@@ -80,7 +80,7 @@ Run `python -m pytest api -q` in the development venv for focused startup, persi
 
 ## A2: single-admin authentication (1.4.0 in development)
 
-Authentication is disabled with generic HTTP 503 responses when configuration is missing or invalid; public wheel/catalog/Telegram endpoints continue to work. A2 provides no admin UI; A3 adds the protected activity APIs documented below. Credentials are read at API startup and reach only the API container.
+Authentication is disabled with generic HTTP 503 responses when configuration is missing or invalid; public wheel/catalog/Telegram endpoints continue to work. The `/admin` SPA uses this A2 authentication foundation and A3 protected activity APIs. Credentials are read at API startup and reach only the API container.
 
 Configure these ignored `.env` values for Compose:
 
@@ -91,6 +91,8 @@ Configure these ignored `.env` values for Compose:
 Restart/recreate only the API after changing these values. The password is verified with scrypt (`N=32768, r=8, p=3`, approximately 32 MiB working memory), a secret-derived domain-separated salt, and constant-time digest comparison. Only the derived key remains in the auth object; the deployment environment necessarily retains the configured password. Verification runs in a worker thread with at most one KDF running per API process. No plaintext password is stored in SQLite or included in response/validation errors.
 
 ### SPA login and CSRF flow
+
+The `/admin` frontend calls these endpoints with same-origin credentials. It keeps CSRF values only in the active React session; cookies are HttpOnly and are never copied into browser storage. A 401 from a protected API request returns the interface to the login state. The route itself is not a security boundary: all protected reads and mutations are enforced by FastAPI.
 
 All requests below are same-origin, with cookies included. There are no redirects or CORS grants.
 
