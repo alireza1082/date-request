@@ -150,7 +150,9 @@ docker compose ps
 curl -f http://127.0.0.1:18080/healthz
 ```
 
-For an immediate rollback between 1.3+ deployments, use both retained images without rebuilding it. This restores the exact application image even when base-image tags have changed. Use the same project directory and `.env`:
+Before an upgrade, create and verify a private database backup using the [SQLite backup procedure](../api/README.md#persistence-backups-and-rollback). Image rollback alone is safe only when the previous API supports the current database schema. If it does not, stop this project's API and restore the matching pre-upgrade backup into a separate volume before starting the old API. Preserve the current volume; never downgrade its schema in place.
+
+For an immediate rollback with a compatible database, use both retained images without rebuilding them. This restores the exact application images even when base-image tags have changed. Use the same project directory and `.env`:
 
 ```sh
 DATE_WHEEL_ROLLBACK_FILE=$(mktemp)
