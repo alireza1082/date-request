@@ -100,6 +100,14 @@ def test_admin_history_auth_filters_stats_and_clear_csrf(app_client):
         assert admin.request('DELETE', '/api/admin/history', json={'confirmation': 'CLEAR_HISTORY'}, headers={'Origin': ORIGIN, 'X-CSRF-Token': csrf}).json() == {'deleted': 2}
 
 
+def test_maximum_history_end_date_is_rejected_without_overflow(app_client):
+    client, _, _ = app_client
+    response = client.get('/api/admin/history', params={'date_to': '9999-12-31'})
+    assert response.status_code == 422
+    assert response.json() == {'detail': 'Invalid date range.'}
+    assert client.get('/api/admin/history', params={'date_to': '9999-12-30'}).status_code == 200
+
+
 def test_request_size_rate_limit_and_retention(tmp_path):
     now = [100.0]
     with TestClient(create_app(database_path=tmp_path / 'bounded.sqlite3', clock=lambda: now[0], history_retention_days=30)) as client:

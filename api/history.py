@@ -143,6 +143,8 @@ def install_history_routes(app):
             raise HTTPException(503, 'History is temporarily unavailable.') from None
 
     def date_filters(date_from: date | None, date_to: date | None):
+        if date_to == date.max:
+            raise HTTPException(422, 'Invalid date range.')
         if date_from and date_to and date_from > date_to:
             raise HTTPException(422, 'Invalid date range.')
         clauses, values = [], []
