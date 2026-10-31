@@ -29,7 +29,6 @@ export function App() {
   const [showVisitorDetails, setShowVisitorDetails] = useState(false);
   const [visitorEntryComplete, setVisitorEntryComplete] = useState(false);
   const [displayName, setDisplayName] = useState("");
-  const [historyConsent, setHistoryConsent] = useState(false);
   const [seasonalSettings, setSeasonalSettings] = useState<SeasonalSettings | null>(null);
   const [seasonalLoading, setSeasonalLoading] = useState(false);
   const [seasonalError, setSeasonalError] = useState("");
@@ -137,16 +136,15 @@ export function App() {
     } finally { setSeasonalLoading(false); }
   }, []);
 
-  const finishVisitorDetails = useCallback((name: string, consent: boolean) => {
+  const finishVisitorDetails = useCallback((name: string) => {
     setDisplayName(name);
-    setHistoryConsent(consent);
     setShowVisitorDetails(false);
     setVisitorEntryComplete(true);
     void loadSeasonalSettings();
   }, [loadSeasonalSettings]);
 
   const saveCurrentHistory = useCallback(async () => {
-    if (!historyConsent || !selectedActivity || !spinMood || historyRequestLockRef.current) return;
+    if (!selectedActivity || !spinMood || historyRequestLockRef.current) return;
     let submission = historySubmissionRef.current;
     try {
       if (!submission) {
@@ -175,7 +173,7 @@ export function App() {
     } finally {
       historyRequestLockRef.current = false;
     }
-  }, [displayName, historyConsent, invitationRead.invitation, selectedActivity, spinMood]);
+  }, [displayName, invitationRead.invitation, selectedActivity, spinMood]);
 
   useEffect(() => {
     if (!selectedActivity) {
@@ -184,8 +182,8 @@ export function App() {
       setHistoryStatus("idle");
       return;
     }
-    if (historyConsent) void saveCurrentHistory();
-  }, [historyConsent, saveCurrentHistory, selectedActivity]);
+    void saveCurrentHistory();
+  }, [saveCurrentHistory, selectedActivity]);
 
   const closeComposer = useCallback(() => {
     setIsComposerOpen(false);
@@ -199,7 +197,7 @@ export function App() {
   if (visitorEntryComplete && seasonalLoading) return <SeasonalSettingsGate loading error="" onRetry={() => void loadSeasonalSettings()} />;
   if (visitorEntryComplete && seasonalError) return <SeasonalSettingsGate loading={false} error={seasonalError} onRetry={() => void loadSeasonalSettings()} onContinue={() => { setVisitorEntryComplete(false); setSeasonalError(""); }} />;
   if (visitorEntryComplete && showHalloween && seasonalSettings) {
-    return <HalloweenScreen settings={seasonalSettings} onContinue={() => setShowHalloween(false)} />;
+    return <HalloweenScreen settings={seasonalSettings} />;
   }
 
   if (!catalog) return <>

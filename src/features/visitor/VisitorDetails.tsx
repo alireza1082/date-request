@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 
 interface VisitorDetailsProps {
-  readonly onContinue: (displayName: string, historyConsent: boolean) => void;
+  readonly onContinue: (displayName: string) => void;
 }
 
 function sanitizeDisplayName(value: string): string {
@@ -14,16 +14,15 @@ function sanitizeDisplayName(value: string): string {
 
 export function VisitorDetails({ onContinue }: VisitorDetailsProps) {
   const [displayName, setDisplayName] = useState("");
-  const [historyConsent, setHistoryConsent] = useState(false);
 
   const continueWithName = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    onContinue(displayName.trim().slice(0, 32), historyConsent);
+    onContinue(displayName.trim().slice(0, 32));
   };
 
   const continueAsGuest = () => {
     setDisplayName("");
-    onContinue("", historyConsent);
+    onContinue("");
   };
 
   return (
@@ -45,31 +44,17 @@ export function VisitorDetails({ onContinue }: VisitorDetailsProps) {
             maxLength={32}
             value={displayName}
             onChange={(event) => setDisplayName(sanitizeDisplayName(event.target.value))}
-            placeholder="مثلاً: هم‌قرارِ امروز"
+            placeholder="مثلاً «مدیـ»"
             aria-describedby="visitor-privacy-copy"
           />
 
-          <label className="history-consent-card" htmlFor="history-consent">
-            <input
-              id="history-consent"
-              type="checkbox"
-              checked={historyConsent}
-              onChange={(event) => setHistoryConsent(event.target.checked)}
-            />
-            <span className="history-consent-check" aria-hidden="true" />
-            <span className="history-consent-copy">
-              <strong>مایلم نتیجهٔ چرخش ثبت بشه</strong>
-              <small>فقط با اجازهٔ تو، نتیجه و اسم اختیاری‌ات برای صاحب سایت ذخیره می‌شه. ثبت نتیجه ربطی به ارسال تلگرام نداره.</small>
-            </span>
-          </label>
           <p id="visitor-privacy-copy" className="visitor-privacy-note">
-            اگر این گزینه رو فعال کنی، صاحب سایت می‌تونه نتیجهٔ ثبت‌شده و اسمی که خودت وارد کردی رو ببینه. بدون اجازهٔ تو چیزی از تاریخچه ذخیره نمی‌کنیم.
+            نتیجهٔ چرخش و نامی که وارد می‌کنی برای صاحب سایت ثبت می‌شه.
           </p>
 
           <button className="button button-primary visitor-continue" type="submit">بریم سراغ سورپرایز <span aria-hidden="true">←</span></button>
           <button className="visitor-guest" type="button" onClick={continueAsGuest}>بدون وارد کردن اسم ادامه می‌دم</button>
         </form>
-        <span className="visitor-footnote">بدون حساب، ایمیل یا شماره تلفن</span>
       </section>
     </main>
   );

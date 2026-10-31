@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import type { SeasonalSettings } from "../../data/seasonal-settings";
 import "./halloween.css";
 
@@ -12,6 +13,34 @@ export function HalloweenInvitationCard({
 }) {
   return (
     <section className={`halloween-invitation${preview ? " is-preview" : ""}`} aria-labelledby={preview ? undefined : "halloween-title"}>
+      <HalloweenNightArtwork />
+      <p className="halloween-eyebrow"><span aria-hidden="true">☾</span> یک دعوتِ پاییزی</p>
+      <h1 id={preview ? undefined : "halloween-title"}>{settings.halloween_title}</h1>
+      <p className="halloween-subtitle">{settings.halloween_subtitle}</p>
+      {settings.halloween_note && <p className="halloween-note">{settings.halloween_note}</p>}
+      {preview
+        ? <span className="halloween-cta halloween-cta-preview">{settings.halloween_cta}</span>
+        : <button className="halloween-cta" type="button" autoFocus onClick={onContinue}>{settings.halloween_cta}<span aria-hidden="true">←</span></button>}
+      {!preview && <span className="halloween-signoff">بعدش آمادهٔ یک شبِ خاص می‌شیم <span aria-hidden="true">✦</span></span>}
+    </section>
+  );
+}
+
+export function HalloweenScreen({ settings }: { readonly settings: SeasonalSettings }) {
+  const [preparing, setPreparing] = useState(false);
+  return (
+    <main className="halloween-screen" dir="rtl">
+      <div className="halloween-orbit halloween-orbit-one" aria-hidden="true" />
+      <div className="halloween-orbit halloween-orbit-two" aria-hidden="true" />
+      {preparing
+        ? <HalloweenPreparationCard onBack={() => setPreparing(false)} />
+        : <HalloweenInvitationCard settings={settings} onContinue={() => setPreparing(true)} />}
+    </main>
+  );
+}
+
+function HalloweenNightArtwork() {
+  return (
       <div className="halloween-night-art" aria-hidden="true">
         <svg viewBox="0 0 520 280" role="presentation">
           <path d="M28 213c55-44 98-28 145-44 57-19 94-58 152-43 58 15 91 63 167 54v100H28Z" fill="#30283e" />
@@ -38,24 +67,40 @@ export function HalloweenInvitationCard({
           <path d="m240 42 3 8 8 3-8 3-3 8-3-8-8-3 8-3Zm45 49 2 6 6 2-6 2-2 6-2-6-6-2 6-2Z" fill="#f6d99b" />
         </svg>
       </div>
-      <p className="halloween-eyebrow"><span aria-hidden="true">☾</span> یک دعوتِ پاییزی</p>
-      <h1 id={preview ? undefined : "halloween-title"}>{settings.halloween_title}</h1>
-      <p className="halloween-subtitle">{settings.halloween_subtitle}</p>
-      {settings.halloween_note && <p className="halloween-note">{settings.halloween_note}</p>}
-      {preview
-        ? <span className="halloween-cta halloween-cta-preview">{settings.halloween_cta}</span>
-        : <button className="halloween-cta" type="button" autoFocus onClick={onContinue}>{settings.halloween_cta}<span aria-hidden="true">←</span></button>}
-      {!preview && <span className="halloween-signoff">بعدش با هم چرخ رو می‌چرخونیم <span aria-hidden="true">✦</span></span>}
-    </section>
   );
 }
 
-export function HalloweenScreen({ settings, onContinue }: { readonly settings: SeasonalSettings; readonly onContinue: () => void }) {
+const preparationItems = [
+  "لباس خوشگله🐥",
+  "دختر خوشگله🤤",
+  "گریم هالووینی😋🥺",
+  "عطر خوب",
+  "موزیک خوب",
+  "حال خوب و یه لبخند قشنگ",
+] as const;
+
+function HalloweenPreparationCard({ onBack }: { readonly onBack: () => void }) {
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { titleRef.current?.focus({ preventScroll: true }); }, []);
+
   return (
-    <main className="halloween-screen" dir="rtl">
-      <div className="halloween-orbit halloween-orbit-one" aria-hidden="true" />
-      <div className="halloween-orbit halloween-orbit-two" aria-hidden="true" />
-      <HalloweenInvitationCard settings={settings} onContinue={onContinue} />
-    </main>
+    <section className="halloween-invitation halloween-preparation" aria-labelledby="preparation-title">
+      <HalloweenNightArtwork />
+      <p className="halloween-eyebrow"><span aria-hidden="true">✦</span> برای یک شبِ متفاوت</p>
+      <h1 id="preparation-title" tabIndex={-1} ref={titleRef}>پس آماده شو</h1>
+      <p className="halloween-subtitle">یه شبِ خاص، چند تا چیزِ قشنگ لازم داره…</p>
+      <div className="preparation-kit">
+        <h2>مواد لازمِ امشب</h2>
+        <ul className="preparation-list">
+          {preparationItems.map((item) => <li key={item}><span className="preparation-check" aria-hidden="true">✓</span><span>{item}</span></li>)}
+        </ul>
+      </div>
+      <div className="preparation-closing">
+        <span className="preparation-seal" aria-hidden="true">✧</span>
+        <h2>درخواست شما ثبت شد</h2>
+        <p>در اولین فرصت کاراتون رو تموم کنید؛<br />پاهاتون رو گرم کنید.😁❤️</p>
+      </div>
+      <button className="preparation-back" type="button" onClick={onBack}>برگشت به دعوت <span aria-hidden="true">↶</span></button>
+    </section>
   );
 }

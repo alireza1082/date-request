@@ -73,6 +73,26 @@
 .halloween-invitation.is-preview .halloween-note { font-size: .68rem; }
 .halloween-invitation.is-preview .halloween-cta { min-height: 42px; margin-top: .8rem; font-size: .7rem; }
 @keyframes halloween-arrive { from { opacity: 0; transform: translateY(15px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.halloween-preparation { width: min(100%, 700px); }
+.halloween-preparation .halloween-night-art { width: min(70%, 240px); margin-top: -1rem; margin-inline: auto; }
+.halloween-preparation h1:focus { outline: none; }
+.preparation-kit { width: 100%; margin-top: 1.25rem; text-align: start; }
+.preparation-kit h2 { margin: 0 0 .75rem; color: #f1c986; font-size: .85rem; font-weight: 600; }
+.preparation-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; margin: 0; padding: 0; list-style: none; }
+.preparation-list li { display: flex; align-items: center; gap: .6rem; min-width: 0; padding: .8rem .7rem; border: 1px solid #f0d7ac25; border-radius: 14px; background: #fff3db08; color: #f7e9dd; font-size: .85rem; line-height: 1.9; text-align: start; }
+.preparation-check { display: grid; flex: 0 0 24px; height: 24px; place-items: center; border: 1px solid #eac38655; border-radius: 50%; color: #f0c887; font-size: .75rem; background: #e8ae6610; }
+.preparation-closing { width: 100%; margin-top: 1.3rem; padding: 1.1rem .7rem; border-block: 1px solid #eac38633; background: radial-gradient(ellipse at center, #d6924812, transparent 75%); }
+.preparation-seal { color: #f0c887; font-size: 1.45rem; }
+.preparation-closing h2 { margin: .2rem 0 .4rem; color: #ffe7be; font-size: 1.05rem; font-weight: 600; }
+.preparation-closing p { margin: 0; color: #e8d8ce; font-size: .87rem; line-height: 2.1; }
+.preparation-back { min-height: 44px; margin-top: .65rem; padding: .4rem 1rem; border: 0; border-radius: 999px; color: #e6c6a5; background: transparent; font: inherit; font-size: .75rem; cursor: pointer; }
+.preparation-back:hover { background: #fff3db0d; }
+.preparation-back:focus-visible { outline: 2px solid #ffe0a8; outline-offset: 3px; }
+@media (max-width: 480px) {
+  .preparation-list { grid-template-columns: 1fr; gap: .5rem; }
+  .preparation-list li { padding: .55rem .75rem; }
+  .halloween-preparation .halloween-night-art { width: 170px; margin-top: -.7rem; }
+}
 @media (max-width: 420px) {
   .halloween-screen { padding-inline: .8rem; }
   .halloween-invitation { padding: 1.15rem .9rem 1.25rem; border-radius: 26px 26px 76px 26px; }

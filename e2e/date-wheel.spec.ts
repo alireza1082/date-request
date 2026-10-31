@@ -60,14 +60,17 @@ async function inspectWheelLanding(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
+  await page.context().route("**/api/history", (route) => route.fulfill({ status: 202, json: { recorded: true, duplicate: false } }));
   await page.context().route("**/api/catalog", (route) => route.fulfill({ headers: { "Cache-Control": "no-store" }, json: apiCatalog }));
   await page.context().route("**/api/settings", (route) => route.fulfill({ headers: { "Cache-Control": "no-store" }, json: apiSettings }));
   await page.addInitScript(() => {
     const testWindow = window as Window & { __wheelDrawCount?: number; __sharedMessage?: string };
     testWindow.__wheelDrawCount = 0;
+    const actualRandomValues = window.crypto.getRandomValues.bind(window.crypto);
     Object.defineProperty(window.crypto, "getRandomValues", {
       configurable: true,
-      value: (values: Uint32Array) => {
+      value: (values: Uint32Array | Uint8Array) => {
+        if (!(values instanceof Uint32Array)) return actualRandomValues(values);
         values[0] = 3;
         testWindow.__wheelDrawCount = (testWindow.__wheelDrawCount ?? 0) + 1;
         return values;
@@ -416,7 +419,7 @@ test("shows the intro at each normal visit and keeps the entry accessible", asyn
   }
 });
 
-test("records a named invitation result only after opt-in and retries with the same event key", async ({ page }) => {
+test("records a named invitation result after continuing and retries with the same event key", async ({ page }) => {
   const submissions: Record<string, unknown>[] = [];
   const notificationRequests: Record<string, unknown>[] = [];
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -438,8 +441,9 @@ test("records a named invitation result only after opt-in and retries with the s
   await page.setViewportSize({ width: 375, height: 812 });
   await page.screenshot({ path: "test-results/visitor-name-privacy-mobile.png", fullPage: true, animations: "disabled" });
   await page.getByLabel("اسمتو بنویس").fill("هم‌قرارِ امروز");
-  await page.getByText("مایلم نتیجهٔ چرخش ثبت بشه", { exact: true }).click();
-  await expect(page.locator("#history-consent")).toBeChecked();
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
+  await expect(page.getByPlaceholder("مثلاً «مدیـ»")).toBeVisible();
+  await expect(page.getByText("بدون حساب، ایمیل یا شماره تلفن")).toHaveCount(0);
   await page.getByRole("button", { name: /بریم سراغ سورپرایز/ }).click();
   await page.locator(".hub-button").click();
   await expect(page.getByRole("dialog")).toBeVisible();
@@ -464,27 +468,35 @@ test("records a named invitation result only after opt-in and retries with the s
   });
 });
 
-test("declining history keeps the wheel usable and submits no event", async ({ page }) => {
-  let submissions = 0;
+test("records guest spins without a history choice and preserves repeat spins", async ({ page }) => {
+  const submissions: Record<string, unknown>[] = [];
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.route("**/api/history", async (route) => {
-    submissions += 1;
+    submissions.push(route.request().postDataJSON() as Record<string, unknown>);
     await route.fulfill({ status: 202, json: { recorded: true, duplicate: false } });
   });
   await page.goto("/");
   await page.getByRole("button", { name: "بزن بریم!" }).click();
-  await page.getByLabel("اسمتو بنویس").fill("اسمِ خصوصی");
-  await expect(page.getByLabel("مایلم نتیجهٔ چرخش ثبت بشه")).not.toBeChecked();
-  await page.getByRole("button", { name: /بریم سراغ سورپرایز/ }).click();
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
+  await expect(page.getByText(/مایلم نتیجه|اگر این گزینه|بدون اجازه|بدون حساب، ایمیل/)).toHaveCount(0);
+  await expect(page.getByPlaceholder("مثلاً «مدیـ»")).toBeVisible();
+  await page.getByRole("button", { name: "بدون وارد کردن اسم ادامه می‌دم" }).click();
   await page.locator(".hub-button").click();
   await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(page.locator(".hub-button")).toBeEnabled();
-  expect(submissions).toBe(0);
-  await expect(page.locator(".history-feedback")).toHaveCount(0);
+  await expect(page.locator(".history-feedback")).toContainText("نتیجه ثبت شد");
+  expect(submissions).toHaveLength(1);
+  expect(submissions[0]).toMatchObject({ consent: true, display_name: null });
+  await page.getByRole("button", { name: /قبوله، بریم/ }).click();
+  await page.locator(".hub-button").click();
+  await expect(page.locator(".history-feedback")).toContainText("نتیجه ثبت شد");
+  expect(submissions).toHaveLength(2);
+  expect(submissions[1]?.event_id).not.toBe(submissions[0]?.event_id);
 });
 
-test("shows the editable Halloween invitation after name/privacy and before the wheel", async ({ page }) => {
+test("shows the editable Halloween invitation then preparation instead of the wheel", async ({ page }) => {
   let seasonal = apiSettings;
+  let historyRequests = 0;
+  await page.route("**/api/history", (route) => { historyRequests += 1; return route.fulfill({ status: 202, json: { recorded: true } }); });
   await page.route("**/api/settings", (route) => route.fulfill({ headers: { "Cache-Control": "no-store" }, json: seasonal }));
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto("/");
@@ -513,8 +525,23 @@ test("shows the editable Halloween invitation after name/privacy and before the 
     expect(layout.right).toBeLessThanOrEqual(width);
   }
   await page.getByRole("button", { name: seasonal.halloween_cta }).click();
-  await expect(page.locator(".halloween-screen")).toHaveCount(0);
-  await expect(page.locator(".hub-button")).toBeFocused();
+  await expect(page.getByRole("heading", { name: "پس آماده شو" })).toBeFocused();
+  for (const item of ["لباس خوشگله🐥", "دختر خوشگله🤤", "گریم هالووینی😋🥺"]) {
+    await expect(page.getByText(item, { exact: true })).toBeVisible();
+  }
+  await expect(page.getByRole("heading", { name: "درخواست شما ثبت شد" })).toBeVisible();
+  await expect(page.getByText(/در اولین فرصت کاراتون رو تموم کنید/)).toBeVisible();
+  await expect(page.getByText(/پاهاتون رو گرم کنید/)).toBeVisible();
+  await expect(page.locator(".hub-button")).toHaveCount(0);
+  for (const width of [375, 430, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `test-results/halloween-preparation-${width}.png`, fullPage: true, animations: "disabled" });
+  }
+  expect(historyRequests).toBe(0);
+  await page.getByRole("button", { name: /برگشت به دعوت/ }).click();
+  await expect(page.getByRole("heading", { name: seasonal.halloween_title })).toBeVisible();
+  await expect(page.locator(".hub-button")).toHaveCount(0);
 });
 
 test("allows continuing when the optional seasonal settings service is unavailable", async ({ page }) => {
@@ -540,7 +567,8 @@ test("keeps the invitation greeting before name entry and the configured Hallowe
   await expect(page.getByRole("heading", { name: apiSettings.halloween_title })).toBeVisible();
   await expect(page.getByRole("heading", { name: /چرخ امروز کجا/ })).toHaveCount(0);
   await page.getByRole("button", { name: apiSettings.halloween_cta }).click();
-  await expect(page.locator(".hub-button")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "پس آماده شو" })).toBeVisible();
+  await expect(page.locator(".hub-button")).toHaveCount(0);
 });
 
 test("renders joined Persian labels with centered upright glyphs in all moods", async ({ page }) => {
