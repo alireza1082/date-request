@@ -638,3 +638,23 @@ test("keeps postcards usable when notifications are unavailable", async ({ page 
   await expect(page.getByRole("button", { name: "نتیجه رو براش بفرست 💌" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "ذخیره کارت" })).toBeEnabled();
 });
+
+test("recovers the first transient reads without repeating the entry action", async ({ page }) => {
+  let catalogReads = 0;
+  let settingsReads = 0;
+  await page.route("**/api/catalog", route => {
+    catalogReads += 1;
+    return catalogReads === 1 ? route.fulfill({ status: 503, json: {} }) : route.fulfill({ json: apiCatalog });
+  });
+  await page.route("**/api/settings", route => {
+    settingsReads += 1;
+    return settingsReads === 1 ? route.fulfill({ status: 502, json: {} }) : route.fulfill({ json: apiSettings });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "بزن بریم!" }).click();
+  await page.getByLabel("اسمتو بنویس").fill("همراه");
+  await page.getByRole("button", { name: /بریم سراغ سورپرایز/ }).click();
+  await expect(page.locator(".hub-button")).toBeVisible({ timeout: 5000 });
+  expect(catalogReads).toBe(2);
+  expect(settingsReads).toBe(2);
+});

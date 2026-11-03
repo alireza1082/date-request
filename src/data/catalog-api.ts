@@ -1,3 +1,4 @@
+import { readPublicJson } from "./public-read";
 import bundledCatalog from "./catalog.json";
 import type { Activity } from "./activities";
 import type { MoodId, MoodOption } from "./moods";
@@ -99,20 +100,10 @@ export function parsePublicCatalog(value: unknown): PublicCatalog {
 }
 
 export async function fetchPublicCatalog(): Promise<PublicCatalog> {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 8_000);
   try {
-    const response = await fetch("/api/catalog", {
-      method: "GET", credentials: "same-origin", cache: "no-store", redirect: "error", signal: controller.signal,
-      headers: { Accept: "application/json" },
-    });
-    if (!response.ok) throw new CatalogError(response.status >= 500 ? "فهرست قرارها فعلاً در دسترس نیست." : "پاسخ فهرست قرارها معتبر نبود.");
-    const body = await response.text();
-    if (new TextEncoder().encode(body).byteLength > MAX_RESPONSE_BYTES) throw new CatalogError("فهرست قرارها بزرگ‌تر از حد مجازه.");
-    try { return parsePublicCatalog(JSON.parse(body) as unknown); }
-    catch (error) { if (error instanceof CatalogError) throw error; throw new CatalogError(); }
+    return parsePublicCatalog(await readPublicJson("/api/catalog", MAX_RESPONSE_BYTES));
   } catch (error) {
     if (error instanceof CatalogError) throw error;
-    throw new CatalogError("ارتباط با فهرست قرارها برقرار نشد؛ دوباره تلاش کن.");
-  } finally { window.clearTimeout(timeout); }
+    throw new CatalogError("فهرست قرارها فعلاً در دسترس نیست.");
+  }
 }

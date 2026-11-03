@@ -1,3 +1,4 @@
+import { readPublicJson } from "./public-read";
 export interface SeasonalSettings {
   readonly halloween_enabled: boolean;
   readonly halloween_title: string;
@@ -45,20 +46,10 @@ export function parseSeasonalSettings(value: unknown): SeasonalSettings {
 }
 
 export async function fetchSeasonalSettings(): Promise<SeasonalSettings> {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 5_000);
   try {
-    const response = await fetch("/api/settings", {
-      method: "GET", credentials: "same-origin", cache: "no-store", redirect: "error",
-      signal: controller.signal, headers: { Accept: "application/json" },
-    });
-    if (!response.ok) throw new SeasonalSettingsError();
-    const body = await response.text();
-    if (new TextEncoder().encode(body).byteLength > 8_192) throw new SeasonalSettingsError();
-    try { return parseSeasonalSettings(JSON.parse(body) as unknown); }
-    catch (error) { if (error instanceof SeasonalSettingsError) throw error; throw new SeasonalSettingsError(); }
+    return parseSeasonalSettings(await readPublicJson("/api/settings", 8192));
   } catch (error) {
     if (error instanceof SeasonalSettingsError) throw error;
     throw new SeasonalSettingsError("ارتباط با تنظیمات سورپرایز برقرار نشد؛ دوباره تلاش کن.");
-  } finally { window.clearTimeout(timeout); }
+  }
 }
