@@ -189,8 +189,10 @@ def install_admin_auth(app):
                 else:
                     await require_admin_mutation(request)
                 body = bytearray()
+                upload_path = bool(re.fullmatch(r'/api/admin/party/scenarios/[a-z][a-z0-9-]{0,39}/image', request.url.path))
+                body_limit = 5 * 1024 * 1024 if upload_path else 2048
                 async for chunk in request.stream():
-                    if len(body) + len(chunk) > 2048:
+                    if len(body) + len(chunk) > body_limit:
                         raise HTTPException(413, 'Request too large.')
                     body.extend(chunk)
                 request._body = bytes(body)

@@ -6,7 +6,7 @@ from pathlib import Path
 from api.seasonal_defaults import DEFAULTS
 
 CATALOG_PATH = Path(__file__).resolve().parents[1] / 'src/data/catalog.json'
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 BUSY_TIMEOUT_MS = 5000
 
 
@@ -101,6 +101,44 @@ def initialize(connection: sqlite3.Connection) -> None:
                 connection.execute('INSERT INTO activities (id,title,wheel_label,description,suggestion,icon,emoji,color,ink,enabled,sort_order,archived) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
                     (activity_id,title,label,description,suggestion,icon,emoji,color,'light',int(count < 40 and active < 10), min(order,10000),int(count >= 40)))
                 connection.execute("INSERT INTO activity_moods VALUES (?, 'outdoor')", (activity_id,))
+        if version < 8:
+            connection.execute("INSERT OR IGNORE INTO settings VALUES ('mode_version', '0')")
+            connection.execute("INSERT OR IGNORE INTO settings VALUES ('party_selection_mode', 'random')")
+            connection.execute("INSERT OR IGNORE INTO settings VALUES ('party_fixed_scenario_id', '')")
+            connection.execute('''CREATE TABLE party_media (
+                id TEXT PRIMARY KEY,
+                content BLOB NOT NULL,
+                created_at TEXT NOT NULL
+            )''')
+            connection.execute('''CREATE TABLE party_scenarios (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                headline TEXT NOT NULL,
+                description TEXT NOT NULL,
+                alt TEXT NOT NULL,
+                artwork_key TEXT NOT NULL,
+                media_id TEXT REFERENCES party_media(id) ON DELETE SET NULL,
+                enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
+                sort_order INTEGER NOT NULL,
+                archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0, 1)),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )''')
+            connection.execute('CREATE INDEX party_scenarios_public_order ON party_scenarios(enabled, archived, sort_order, id)')
+            connection.execute('''CREATE TABLE party_scenario_steps (
+                scenario_id TEXT NOT NULL REFERENCES party_scenarios(id) ON DELETE CASCADE,
+                step_order INTEGER NOT NULL,
+                text TEXT NOT NULL,
+                PRIMARY KEY(scenario_id, step_order)
+            )''')
+            from api.party_defaults import PARTY_DEFAULTS
+            for index, scenario in enumerate(PARTY_DEFAULTS):
+                connection.execute('''INSERT OR IGNORE INTO party_scenarios
+                    (id,title,headline,description,alt,artwork_key,enabled,sort_order,archived,created_at,updated_at)
+                    VALUES (?,?,?,?,?,?,1,?,0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)''',
+                    (scenario['id'], scenario['title'], scenario['headline'], scenario['description'], scenario['alt'], scenario['artwork_key'], index))
+                connection.executemany('INSERT OR IGNORE INTO party_scenario_steps VALUES (?,?,?)',
+                    [(scenario['id'], step_index, step) for step_index, step in enumerate(scenario['steps'])])
         connection.execute(f'PRAGMA user_version = {SCHEMA_VERSION}')
         connection.commit()
     except Exception:

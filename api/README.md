@@ -250,6 +250,32 @@ The settings screen reads and updates `/api/admin/settings` using a fresh sessio
 
 Schema 6 → 7 uses the existing `BEGIN IMMEDIATE` migration. It preserves activities, historical references, diagnostics and sessions, adds the missing mode key, and conditionally inserts three stable outing IDs: `horse-riding`, `escape-room`, `laser-tag`. Existing matching IDs are reserved and untouched, including archived records. New activities use approved existing icons/colors and only the outdoor mood. New options are disabled if the active mood is full, or archived if forty non-archived slots are already occupied. No user data is removed or reseeded. Fresh databases execute the same migration path. Unsupported newer schemas still fail startup.
 
-Party content is locally bundled frontend presentation data, not an editable ordinary-catalog activity. Party spins produce no history write and no Telegram request. `/api/notify` retains its consent requirement and fixed destination. No new public write endpoint or permission was added.
+The initial Party presentation in schema 7 was locally bundled. Schema 8 moves scenario content into the persistent, administrator-managed library described below. Party spins remain presentation-only: they do not create an ordinary activity history event or Telegram request. `/api/notify` retains its consent requirement and fixed destination.
 
 Focused checks: `python -m pytest api/test_settings.py api/test_storage.py api/test_catalog.py api/test_activities.py -q`; the full backend suite also covers authentication, CSRF, notifications and prior migrations. Use a SQLite backup before upgrade and the matching pre-upgrade backup if reverting to an image that supports only schema 6.
+
+## Party scenario management (schema 8)
+
+`GET /api/party` is the public, validated runtime contract. It returns `selection_mode` (`random` or `fixed`) and only eligible scenarios. Random mode returns enabled, non-archived scenarios in administration order; fixed mode returns only the selected active scenario. The response includes stable ID, Persian title, reveal headline, plain-text description, image alt text, three to five plain-text steps, a bundled `artwork_key`, and an optional API-generated `image_url`. It omits enabled/draft/archive state, timestamps, media identifiers, and all administrative data. Dynamic settings/library responses use `Cache-Control: no-store`; immutable API media is served as `image/webp` with `nosniff` and an immutable cache key.
+
+Authenticated administrator routes:
+
+- `GET /api/admin/party/scenarios` — list non-archived scenarios, including disabled drafts.
+- `POST /api/admin/party/scenarios` — create a scenario; new entries default disabled.
+- `PATCH /api/admin/party/scenarios/{id}` — edit content, steps, order, or active state.
+- `DELETE /api/admin/party/scenarios/{id}` — archive without deleting its record or media.
+- `POST /api/admin/party/scenarios/reorder` — set the complete unique order in one transaction.
+- `GET /api/admin/party/selection` and `PATCH /api/admin/party/selection` — inspect/set random or fixed outcome policy. Fixed mode requires an enabled, non-archived scenario. The current fixed target cannot be disabled/archived until selection changes.
+- `POST /api/admin/party/scenarios/{id}/image` — replace artwork with a bounded raster upload.
+
+Every read uses `require_admin`; every mutation uses the existing authenticated, configured-Origin and session-bound CSRF check. SQLite writes use `BEGIN IMMEDIATE`; invalid updates roll back. Scenario title, headline, description, alt, steps, IDs and bundled-art keys are constrained and rendered as text. New or disabled scenarios are never published through the public contract. Existing six outcomes and the new `dance-and-lights` / **شب رقص و نور ✨** outcome are seeded on version 7→8 using insert-if-absent logic, so restarts do not duplicate or overwrite custom content. Party spins remain outside the consented spin-history table and do not trigger Telegram.
+
+### Artwork upload safeguards
+
+The API accepts at most 4 MiB of JPEG, PNG or WebP source data (the deployment proxy allows 5 MiB to account for HTTP framing). Content is decoded rather than trusted from filename/MIME headers, pixel count is capped at 12 MP, the longest side at 6000 px, then Pillow re-encodes it as metadata-free WebP capped at 3 MiB. SVG, arbitrary URLs and unrecognized formats are rejected. Media rows use random UUID identifiers and remain inside the existing `/app/data` SQLite volume; the read-only root filesystem and non-root API user are unchanged. Total media storage is capped at 64 MiB. Superseded immutable URLs remain addressable for at least 30 days; an upload later reclaims orphan media older than that when it needs space. Uploaded images and all scenarios therefore travel together in the SQLite online backup. No upload is written to Git or an ephemeral container path.
+
+The admin scenario editor requires an explicit **ذخیره سناریو** action and previews the current draft before saving. Mode switches are a separate immediate-save control and do not depend on that form. `PATCH /api/admin/mode` accepts `normal | halloween | party` plus `expected_version`; it commits both special flags and increments `mode_version` atomically. A stale tab receives 409 and must re-read the authoritative state. A transaction guarantees the database never persists both special modes enabled. Existing admin settings APIs remain compatible.
+
+Back up with SQLite's online backup API before applying schema 8. An older schema-7 image rejects schema 8; rollback requires restoring a matching schema-7 backup to a separate volume after stopping the API. Never downgrade the live database or remove its named volume. Schema 8 preserves activities, archived catalog entries, historical records, sessions, settings, and prior diagnostic data. Fresh installs follow the same ordered migration path.
+
+Focused migration/security tests: `python -m pytest api/test_party.py api/test_settings.py api/test_storage.py -q`. These include schema-7 preservation/idempotency, authorization/CSRF, active/fixed selection validation, and media decode/restart persistence. Pillow is pinned in `api/requirements.txt`; no real production uploads or Telegram messages are part of tests.

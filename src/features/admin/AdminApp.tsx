@@ -4,15 +4,17 @@ import { ActivityManagement } from "./ActivityManagement";
 import { AdminOverview } from "./AdminOverview";
 import { HistoryManagement } from "./HistoryManagement";
 import { AdminSettings } from "./AdminSettings";
+import { AdminPartyScenarios } from "./AdminPartyScenarios";
 import "./admin.css";
 import "./admin-reports.css";
 
 type AuthState = "checking" | "login" | "ready" | "unavailable";
-type AdminSection = "overview" | "activities" | "history" | "settings";
+type AdminSection = "overview" | "activities" | "party-scenarios" | "history" | "settings";
 
 const sections: readonly { readonly id: AdminSection; readonly label: string; readonly glyph: string }[] = [
   { id: "overview", label: "نمای کلی", glyph: "⌂" },
   { id: "activities", label: "قرارها و چرخ", glyph: "◉" },
+  { id: "party-scenarios", label: "سناریوها", glyph: "✦" },
   { id: "history", label: "تاریخچه", glyph: "◷" },
   { id: "settings", label: "تنظیمات", glyph: "⚙" },
 ];
@@ -148,6 +150,7 @@ export function AdminApp() {
         {error && <p className="admin-alert" role="status">{error}</p>}
         {section === "overview" ? <AdminOverview onNavigate={setSection} />
           : section === "activities" ? <ActivityManagement />
+            : section === "party-scenarios" ? <AdminPartyScenarios />
             : section === "history" ? <HistoryManagement />
               : <AdminSettings />}
       </main>

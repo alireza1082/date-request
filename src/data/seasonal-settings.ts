@@ -2,6 +2,7 @@ import { readPublicJson } from "./public-read";
 export interface SeasonalSettings {
   readonly halloween_enabled: boolean;
   readonly party_enabled: boolean;
+  readonly mode_version: number;
   readonly halloween_title: string;
   readonly halloween_subtitle: string;
   readonly halloween_cta: string;
@@ -28,6 +29,7 @@ export function parseSeasonalSettings(value: unknown): SeasonalSettings {
   const record = value as Record<string, unknown>;
   if (typeof record.halloween_enabled !== "boolean") throw new SeasonalSettingsError("پاسخ تنظیمات تجربهٔ فصلی معتبر نیست.");
   if (record.party_enabled !== undefined && typeof record.party_enabled !== "boolean") throw new SeasonalSettingsError();
+  if (record.mode_version !== undefined && (!Number.isSafeInteger(record.mode_version) || (record.mode_version as number) < 0)) throw new SeasonalSettingsError();
   if (record.party_enabled === true && record.halloween_enabled === true) throw new SeasonalSettingsError();
   for (const [field, limit] of Object.entries(textLimits) as [keyof typeof textLimits, number][]) {
     const text = record[field];
@@ -42,6 +44,7 @@ export function parseSeasonalSettings(value: unknown): SeasonalSettings {
   return {
     party_enabled: record.party_enabled === true,
     halloween_enabled: record.halloween_enabled,
+    mode_version: typeof record.mode_version === "number" ? record.mode_version : 0,
     halloween_title: record.halloween_title as string,
     halloween_subtitle: record.halloween_subtitle as string,
     halloween_cta: record.halloween_cta as string,

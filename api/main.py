@@ -24,6 +24,7 @@ from api.catalog import CatalogResponse, validate_wheel_configuration
 from api.settings import install_settings_routes
 from api.history import cleanup_expired, install_history_routes
 from api.telegram import TelegramFailure, now_utc, read_diagnostics, record_send, record_validation, send_message, validate_bot
+from api.party import install_party_routes
 from api.storage import connect_database, list_active_activities, notification_activity
 
 CATALOG = json.loads((Path(__file__).resolve().parents[1] / 'src/data/catalog.json').read_text())
@@ -120,6 +121,8 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, d
             return JSONResponse({"detail": "Invalid settings request."}, status_code=422)
         if _request.url.path.startswith("/api/admin/activities"):
             return JSONResponse({"detail": "Invalid activity request."}, status_code=422)
+        if _request.url.path.startswith("/api/admin/party"):
+            return JSONResponse({"detail": "Invalid Party scenario request."}, status_code=422)
         if _request.url.path.startswith("/api/admin/"):
             return JSONResponse({"detail": "Invalid authentication request."}, status_code=422)
         if _request.url.path.startswith('/api/history'):
@@ -160,7 +163,8 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, d
                 if parsed.netloc != request.headers.get('host') or parsed.scheme not in ('http', 'https'):
                     return JSONResponse({'detail': 'Origin not allowed.'}, status_code=403)
         response = await call_next(request)
-        response.headers['Cache-Control'] = 'no-store'
+        if not request.url.path.startswith('/api/party/media/'):
+            response.headers['Cache-Control'] = 'no-store'
         return response
 
     @app.get('/healthz')
@@ -312,6 +316,7 @@ def create_app(token=None, chat_id=None, transport=None, clock=time.monotonic, d
     install_settings_routes(app)
     install_history_routes(app)
     install_activity_routes(app)
+    install_party_routes(app)
     install_admin_auth(app)
     return app
 

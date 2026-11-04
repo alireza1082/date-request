@@ -10,7 +10,7 @@ export interface WheelSpinState {
   readonly selectedIndex: number | null;
   readonly isSpinning: boolean;
   readonly error: string | null;
-  readonly spin: (wheelElement: HTMLDivElement | null, count: number) => void;
+  readonly spin: (wheelElement: HTMLDivElement | null, count: number, targetIndex?: number) => void;
   readonly clearResult: () => void;
 }
 
@@ -28,7 +28,7 @@ export function useWheelSpin(): WheelSpinState {
     animationRef.current?.cancel();
   }, []);
 
-  const spin = useCallback((wheelElement: HTMLDivElement | null, count: number) => {
+  const spin = useCallback((wheelElement: HTMLDivElement | null, count: number, targetIndex?: number) => {
     if (!wheelElement || isSpinningRef.current) return;
 
     isSpinningRef.current = true;
@@ -37,7 +37,7 @@ export function useWheelSpin(): WheelSpinState {
     setError(null);
 
     try {
-      const index = selectRandomIndex(count);
+      const index = targetIndex === undefined ? selectRandomIndex(count) : targetIndex;
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       const target = calculateSpinTarget(rotationRef.current, index, count, FULL_SPINS);
 

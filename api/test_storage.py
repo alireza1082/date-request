@@ -13,6 +13,13 @@ def downgrade_spins_to_v4(connection):
         connection.execute(f'ALTER TABLE spins DROP COLUMN {column}')
 
 
+def downgrade_party_to_v7(connection):
+    connection.execute('DROP TABLE IF EXISTS party_scenario_steps')
+    connection.execute('DROP TABLE IF EXISTS party_scenarios')
+    connection.execute('DROP TABLE IF EXISTS party_media')
+    connection.execute("DELETE FROM settings WHERE key IN ('mode_version','party_selection_mode','party_fixed_scenario_id')")
+
+
 def test_seed_persists_edits_and_does_not_reseed(tmp_path):
     path = tmp_path / 'data.sqlite3'
     connection = sqlite3.connect(path)
@@ -27,16 +34,16 @@ def test_seed_persists_edits_and_does_not_reseed(tmp_path):
     connection = sqlite3.connect(path)
     initialize(connection)
     assert connection.execute('SELECT count(*) FROM activities').fetchone()[0] == initial_count - 1
-    assert connection.execute('PRAGMA user_version').fetchone()[0] == 7
+    assert connection.execute('PRAGMA user_version').fetchone()[0] == 8
     connection.close()
 
 
 def test_newer_database_is_rejected(tmp_path):
     connection = sqlite3.connect(tmp_path / 'data.sqlite3')
-    connection.execute('PRAGMA user_version = 8')
+    connection.execute('PRAGMA user_version = 9')
     with pytest.raises(RuntimeError, match='newer'):
         initialize(connection)
-    assert connection.execute('PRAGMA user_version').fetchone()[0] == 8
+    assert connection.execute('PRAGMA user_version').fetchone()[0] == 9
     connection.close()
 
 
@@ -86,6 +93,7 @@ def test_version_one_upgrade_preserves_all_application_data(tmp_path):
     connection = connect_database(tmp_path / 'upgrade.sqlite3')
     with connection:
         downgrade_spins_to_v4(connection)
+        downgrade_party_to_v7(connection)
         connection.execute('DROP TABLE admin_sessions')
         connection.execute('DROP TABLE admin_login_budget')
         connection.execute('ALTER TABLE activities DROP COLUMN archived')
@@ -98,7 +106,7 @@ def test_version_one_upgrade_preserves_all_application_data(tmp_path):
     assert connection.execute('SELECT * FROM activities ORDER BY id').fetchall() == before
     assert connection.execute('SELECT * FROM activity_moods ORDER BY activity_id, mood_id').fetchall() == memberships
     assert connection.execute("SELECT value FROM settings WHERE key='halloween_enabled'").fetchone()[0] == 'true'
-    assert connection.execute('PRAGMA user_version').fetchone()[0] == 7
+    assert connection.execute('PRAGMA user_version').fetchone()[0] == 8
     assert connection.execute('SELECT count(*) FROM admin_sessions').fetchone()[0] == 0
     initialize(connection)
     assert connection.execute('SELECT * FROM activities ORDER BY id').fetchall() == before
@@ -109,6 +117,7 @@ def test_failed_version_two_upgrade_is_atomic(tmp_path):
     connection = connect_database(tmp_path / 'upgrade.sqlite3')
     with connection:
         downgrade_spins_to_v4(connection)
+        downgrade_party_to_v7(connection)
         connection.execute('DROP TABLE admin_sessions')
         connection.execute('ALTER TABLE activities DROP COLUMN archived')
         connection.execute('PRAGMA user_version=1')
@@ -126,6 +135,7 @@ def test_version_two_upgrade_adds_archive_without_changing_records_or_sessions(t
     connection = connect_database(tmp_path / 'upgrade.sqlite3')
     with connection:
         downgrade_spins_to_v4(connection)
+        downgrade_party_to_v7(connection)
         connection.execute('ALTER TABLE activities DROP COLUMN archived')
         connection.execute('PRAGMA user_version=2')
         connection.execute("UPDATE activities SET title='ویرایش قبلی', enabled=0 WHERE id='cafe'")
@@ -134,7 +144,7 @@ def test_version_two_upgrade_adds_archive_without_changing_records_or_sessions(t
     initialize(connection)
     assert connection.execute('SELECT * FROM activities ORDER BY id').fetchall() == [(*row, 0) for row in before]
     assert connection.execute('SELECT * FROM admin_sessions').fetchall() == [('hash', 'credential-version', 100, 200)]
-    assert connection.execute('PRAGMA user_version').fetchone()[0] == 7
+    assert connection.execute('PRAGMA user_version').fetchone()[0] == 8
     with connection:
         connection.execute("UPDATE activities SET archived=1 WHERE id='cafe'")
     initialize(connection)
@@ -146,6 +156,7 @@ def test_version_two_upgrade_adds_archive_without_changing_records_or_sessions(t
 def test_schema_seven_adds_modes_and_catalog_without_overwriting_existing_rows(tmp_path, crowded):
     connection = connect_database(tmp_path / 'six.sqlite3')
     with connection:
+        downgrade_party_to_v7(connection)
         connection.execute("DELETE FROM activity_moods WHERE activity_id IN ('horse-riding','escape-room','laser-tag')")
         connection.execute("DELETE FROM activities WHERE id IN ('horse-riding','escape-room','laser-tag')")
         connection.execute("DELETE FROM settings WHERE key='party_enabled'")
@@ -158,7 +169,7 @@ def test_schema_seven_adds_modes_and_catalog_without_overwriting_existing_rows(t
         connection.execute('PRAGMA user_version=6')
     before = connection.execute('SELECT * FROM activities ORDER BY id').fetchall()
     initialize(connection)
-    assert connection.execute('PRAGMA user_version').fetchone()[0] == 7
+    assert connection.execute('PRAGMA user_version').fetchone()[0] == 8
     assert connection.execute("SELECT value FROM settings WHERE key='party_enabled'").fetchone()[0] == 'false'
     assert connection.execute("SELECT value FROM settings WHERE key='halloween_enabled'").fetchone()[0] == 'true'
     assert connection.execute("SELECT * FROM activities WHERE id NOT IN ('horse-riding','escape-room','laser-tag') ORDER BY id").fetchall() == before
@@ -174,6 +185,7 @@ def test_schema_seven_adds_modes_and_catalog_without_overwriting_existing_rows(t
 def test_schema_seven_preserves_reserved_ids_and_rolls_back_failure(tmp_path):
     connection = connect_database(tmp_path / 'rollback.sqlite3')
     with connection:
+        downgrade_party_to_v7(connection)
         connection.execute("DELETE FROM settings WHERE key='party_enabled'")
         connection.execute("UPDATE activities SET title='نام سفارشی',archived=1,enabled=0 WHERE id='horse-riding'")
         connection.execute("DELETE FROM activity_moods WHERE activity_id='escape-room'")

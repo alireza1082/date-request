@@ -139,7 +139,7 @@
   .admin-page-heading { align-items: center; }
   .admin-welcome-card { min-height: 280px; }
   .admin-welcome-seal { left: 1.5rem; bottom: 1.4rem; width: 72px; font-size: .48rem; }
-  .admin-mobile-nav { position: fixed; z-index: 10; right: 0; bottom: 0; left: 0; display: grid; min-height: calc(68px + env(safe-area-inset-bottom)); grid-template-columns: repeat(4, minmax(0, 1fr)); padding: .35rem .45rem max(.35rem, env(safe-area-inset-bottom)); border-top: 1px solid #e6d9ce; background: rgb(255 251 245 / 96%); box-shadow: 0 -8px 24px rgb(74 46 42 / 5%); }
+  .admin-mobile-nav { position: fixed; z-index: 10; right: 0; bottom: 0; left: 0; display: grid; min-height: calc(68px + env(safe-area-inset-bottom)); grid-template-columns: repeat(5, minmax(0, 1fr)); padding: .35rem .45rem max(.35rem, env(safe-area-inset-bottom)); border-top: 1px solid #e6d9ce; background: rgb(255 251 245 / 96%); box-shadow: 0 -8px 24px rgb(74 46 42 / 5%); }
   .admin-mobile-nav button { display: grid; min-width: 0; min-height: 48px; align-content: center; justify-items: center; gap: .12rem; border: 0; border-radius: .7rem; color: #8e7b72; background: transparent; cursor: pointer; font-size: .62rem; }
   .admin-mobile-nav button span { font-size: 1.1rem; line-height: 1.2; }
   .admin-mobile-nav button.is-active { color: #8a4f59; background: #f7eae2; font-weight: 700; }

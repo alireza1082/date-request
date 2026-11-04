@@ -4,6 +4,7 @@ import { fetchSeasonalSettings, parseSeasonalSettings, SeasonalSettingsError, re
 const settings = {
   halloween_enabled: true,
   party_enabled: false,
+  mode_version: 0,
   halloween_title: "امشب یه شب معمولی نیست…",
   halloween_subtitle: "لباس هالووینتو آماده کن؛ یه شب متفاوت در راهه.",
   halloween_cta: "آماده‌ام، بزن بریم!",
