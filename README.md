@@ -1,6 +1,6 @@
 # چرخِ قرار · Date Wheel
 
-A tiny Persian interactive surprise for choosing a date together. The frontend ships as static assets, while the lightweight FastAPI service provides the live activity catalog, seasonal settings, administration, consented history, and optional Telegram delivery. There is no visitor account system.
+A tiny Persian interactive surprise for choosing a date together. The frontend ships as static assets, while the lightweight FastAPI service provides the live activity catalog, seasonal settings, administration, recorded history, and optional Telegram delivery. There is no visitor account system.
 
 **Version:** 1.4.0
 
@@ -48,6 +48,15 @@ pnpm test:e2e
 
 The browser suite verifies the visible segment under the pointer, rapid-click protection, repeat spins, mood changes, invitations, safe text rendering, PNG download, export failure fallback, reduced motion, clipboard sharing, and viewport widths from 320px to 1440px. It runs in Chromium, desktop WebKit, and an iPhone-sized WebKit emulation.
 
+Party-specific checks are in `e2e/party.spec.ts`: six hidden choices, visible pointer/result agreement, rapid-click lock, all six local artworks, fallback artwork, keyboard containment/return focus, reduced motion, invitations and the seven target viewport widths. Admin mode switching is covered in `e2e/admin-reports.spec.ts`. For a focused production-build run:
+
+```sh
+pnpm build
+PLAYWRIGHT_USE_PREVIEW=1 pnpm exec playwright test e2e/party.spec.ts e2e/admin-reports.spec.ts --project=chromium
+```
+
+Browser screenshots are written to ignored `test-results/`; they are evidence from browser emulation, not physical-device testing. Telegram calls in browser/API tests are mocked.
+
 ## Architecture
 
 ```text
@@ -60,6 +69,7 @@ src/
   features/
     invitations/               URL codec, greeting, composer, sharing
     results/                    Postcard preview, SVG artwork, canvas export
+    party/                      Six local surprises, compact wheel and modal
     wheel/
       components/               SVG wheel and tactile controls
       engine/                   Secure selection and angle calculations
@@ -74,13 +84,27 @@ e2e/                             Playwright interaction and viewport tests
 
 Manage live activities from `/admin` using the approved icon and color catalogs. Changes persist in SQLite and apply to the next public wheel load/spin without a frontend rebuild. `src/data/catalog.json` is only the initial database seed and shared palette reference; do not edit it to manage production activities. Every approved icon has a local illustration used in result cards and PNG postcards. The API enforces 2–10 active choices per mood.
 
+## Public experience modes
+
+In `/admin` → settings, **حالت شب دونفره** opens a compact six-segment mystery wheel after the existing intro/invitation and optional visitor name. Halloween and Party are mutually exclusive: enabling either automatically disables the other in the same validated SQLite transaction. With both off, the ordinary Date Wheel is active. The dashboard and settings show the effective public mode. Save changes to apply them to new entries; an ongoing experience is not interrupted.
+
+Party outcomes are **شب نئون و موسیقی**, **سینمای اختصاصی**, **کارائوکه دونفره**, **شب نقاب و معما**, **آشپزخونه سورپرایزی**, and **رقابت بازی‌های دونفره**. Their Persian copy, four-step plans and six original SVG scenes live in `src/features/party/`. Artwork is bundled into the application; spinning requires no API request. The wheel reuses the secure rejection-sampling selection and pointer geometry of the standard wheel, locks during animation, and reveals only the selected outcome. Reduced motion skips the long animation. A native modal disables background interaction, contains keyboard focus, supports Escape/close, restores focus and scrolls on short screens.
+
+Party is a presentation-only experience: it does not create an ordinary activity history event, register a request, or send Telegram. Its outcome IDs intentionally remain separate from the editable outing catalog. The visitor notice distinguishes ordinary recorded spins from seasonal presentations. Normal postcard, history and explicit Telegram actions remain on normal wheel results.
+
+### Catalog refinement (schema 7)
+
+The ten existing defaults remain unchanged. Migration 7 adds `horse-riding` (**اسب‌سواری**, a supervised reputable riding center with safety equipment), `escape-room` (**اتاق فرار**, a suitable two-person scenario), and `laser-tag` (**لیزرتگ**, a regulated recreational venue). They join the outdoor mood, which grows from five to eight active defaults; surprise/calm memberships are unchanged. Existing approved illustrations/colors are reused. No activity was removed or replaced: the existing suggestions were reviewed and no clear defect justified overwriting their wording.
+
+The migration checks stable IDs, never overwrites an existing matching/customized/archived record, and runs only once. Where a customized mood already has ten active choices, new options are added disabled for admin review. If all forty catalog slots are occupied, additions are archived drafts instead of exceeding the limit. Back up SQLite before upgrading; an older schema-6 backend requires its matching backup for rollback.
+
 ## Invitations and privacy
 
 Use **یه دعوت کوچولو** to add an optional title and greeting, pick a mood, and create a shareable link. The configuration lives in the URL fragment, so the web server does not receive it. Anyone with the link can read its text; avoid names and private details. Invitation content is not saved to local storage or a backend. Malformed or oversized links fall back to the default wheel.
 
 Visitors can add a short display name or continue without one. The name screen states that spin results and any supplied name are recorded for the site owner. Continuing acknowledges that recording; there is no separate history checkbox. Results are client-reported, retained for 90 days by default, and are not independently verified. Telegram sending remains a separate deliberate action. Names stay in page memory and are not put in URLs or browser storage.
 
-After this entry step the app fetches `/api/settings`. With Halloween disabled, visitors enter the wheel and completed spins are recorded using the existing idempotent history API. With Halloween enabled, the persisted invitation leads to a preparation card and finishes there, with a return-to-invitation action. This seasonal path never opens the wheel, creates a fabricated spin event, or sends Telegram. Its closing confirmation is presentation copy, not a new server-side request-registration feature. The admin preview still uses the same invitation artwork and persisted copy. If settings cannot be reached, visitors can retry or explicitly continue without the seasonal screen.
+After this entry step the app fetches `/api/settings`. With both special modes disabled, visitors enter the wheel and completed spins are recorded using the existing idempotent history API. With Halloween enabled, the persisted invitation leads to a preparation card and finishes there, with a return-to-invitation action. This seasonal path never opens the wheel, creates a fabricated spin event, or sends Telegram. Its closing confirmation is presentation copy, not a new server-side request-registration feature. The admin preview still uses the same invitation artwork and persisted copy. If settings cannot be reached, visitors can retry or explicitly continue without the seasonal screen.
 
 ## Result postcards
 

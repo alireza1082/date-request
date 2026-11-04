@@ -6,7 +6,7 @@ from pathlib import Path
 from api.seasonal_defaults import DEFAULTS
 
 CATALOG_PATH = Path(__file__).resolve().parents[1] / 'src/data/catalog.json'
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 BUSY_TIMEOUT_MS = 5000
 
 
@@ -85,6 +85,22 @@ def initialize(connection: sqlite3.Connection) -> None:
                 validation_error TEXT
             )''')
             connection.execute('INSERT INTO telegram_diagnostics (id) VALUES (1)')
+        if version < 7:
+            connection.execute("INSERT OR IGNORE INTO settings VALUES ('party_enabled', 'false')")
+            additions = (
+                ('horse-riding', 'اسب‌سواری', 'اسب‌سواری', 'یک تجربهٔ دونفره در مرکز معتبر سوارکاری، با مربی و تجهیزات ایمنی.', 'مرکز معتبر رزرو کنین؛ کلاه ایمنی بپوشین و طبق راهنمایی مربی پیش برین.', 'walk', '🐎', '#5d765f'),
+                ('escape-room', 'اتاق فرار', 'اتاق فرار', 'یک معمای مشترک؛ سرنخ‌ها رو کنار هم بذاریم.', 'یک سناریوی مناسب دو نفر انتخاب کنین و درجهٔ سختی رو از قبل بپرسین.', 'museum', '🔎', '#925b58'),
+                ('laser-tag', 'لیزرتگ', 'لیزرتگ', 'یک رقابت تفریحی در مجموعهٔ مجاز لیزرتگ.', 'قوانین مجموعه رو مرور کنین و یک دور دوستانه با تجهیزات استاندارد بازی کنین.', 'bowling', '✨', '#836943'),
+            )
+            for activity_id, title, label, description, suggestion, icon, emoji, color in additions:
+                if connection.execute('SELECT 1 FROM activities WHERE id=?', (activity_id,)).fetchone():
+                    continue
+                count = connection.execute('SELECT count(*) FROM activities WHERE archived=0').fetchone()[0]
+                active = connection.execute("SELECT count(*) FROM activities a JOIN activity_moods m ON a.id=m.activity_id WHERE a.enabled=1 AND a.archived=0 AND m.mood_id='outdoor'").fetchone()[0]
+                order = connection.execute('SELECT coalesce(max(sort_order), -1)+1 FROM activities').fetchone()[0]
+                connection.execute('INSERT INTO activities (id,title,wheel_label,description,suggestion,icon,emoji,color,ink,enabled,sort_order,archived) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+                    (activity_id,title,label,description,suggestion,icon,emoji,color,'light',int(count < 40 and active < 10), min(order,10000),int(count >= 40)))
+                connection.execute("INSERT INTO activity_moods VALUES (?, 'outdoor')", (activity_id,))
         connection.execute(f'PRAGMA user_version = {SCHEMA_VERSION}')
         connection.commit()
     except Exception:

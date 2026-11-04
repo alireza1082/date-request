@@ -11,8 +11,9 @@ import { useWheelSpin } from "../features/wheel/hooks/useWheelSpin";
 import { ResultDialog } from "../features/results/ResultDialog";
 import { VisitorDetails } from "../features/visitor/VisitorDetails";
 import { createHistorySubmission, submitHistory, type HistorySubmission } from "../data/history-client";
-import { fetchSeasonalSettings, type SeasonalSettings } from "../data/seasonal-settings";
+import { fetchSeasonalSettings, resolvePublicMode, type SeasonalSettings } from "../data/seasonal-settings";
 import { HalloweenScreen } from "../features/halloween/HalloweenScreen";
+import { PartyExperience } from "../features/party/PartyExperience";
 
 type HistoryUiStatus = "idle" | "saving" | "saved" | "failed";
 
@@ -32,7 +33,6 @@ export function App() {
   const [seasonalSettings, setSeasonalSettings] = useState<SeasonalSettings | null>(null);
   const [seasonalLoading, setSeasonalLoading] = useState(false);
   const [seasonalError, setSeasonalError] = useState("");
-  const [showHalloween, setShowHalloween] = useState(false);
   const [historyStatus, setHistoryStatus] = useState<HistoryUiStatus>("idle");
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [catalog, setCatalog] = useState<PublicCatalog | null>(null);
@@ -67,8 +67,8 @@ export function App() {
   useEffect(() => { void loadCatalog(); }, [loadCatalog]);
 
   useEffect(() => {
-    if (!showIntro && !showVisitorDetails && !showHalloween && !seasonalLoading && !seasonalError && !isGreetingOpen && catalog && !isPreparingSpin) spinButtonRef.current?.focus({ preventScroll: true });
-  }, [catalog, isPreparingSpin, seasonalError, seasonalLoading, showHalloween, showIntro, showVisitorDetails, isGreetingOpen]);
+    if (!showIntro && !showVisitorDetails && !seasonalLoading && !seasonalError && !isGreetingOpen && catalog && !isPreparingSpin) spinButtonRef.current?.focus({ preventScroll: true });
+  }, [catalog, isPreparingSpin, seasonalError, seasonalLoading, showIntro, showVisitorDetails, isGreetingOpen]);
 
   const startSpin = useCallback(async () => {
     if (spinLockRef.current || wheel.isSpinning) return;
@@ -129,10 +129,8 @@ export function App() {
     try {
       const settings = await fetchSeasonalSettings();
       setSeasonalSettings(settings);
-      setShowHalloween(settings.halloween_enabled);
     } catch (cause) {
       setSeasonalError(cause instanceof Error ? cause.message : "تنظیمات سورپرایز دریافت نشد؛ دوباره تلاش کن.");
-      setShowHalloween(false);
     } finally { setSeasonalLoading(false); }
   }, []);
 
@@ -196,7 +194,11 @@ export function App() {
 
   if (visitorEntryComplete && seasonalLoading) return <SeasonalSettingsGate loading error="" onRetry={() => void loadSeasonalSettings()} />;
   if (visitorEntryComplete && seasonalError) return <SeasonalSettingsGate loading={false} error={seasonalError} onRetry={() => void loadSeasonalSettings()} onContinue={() => { setVisitorEntryComplete(false); setSeasonalError(""); }} />;
-  if (visitorEntryComplete && showHalloween && seasonalSettings) {
+  const publicMode = seasonalSettings ? resolvePublicMode(seasonalSettings) : "normal";
+  if (visitorEntryComplete && seasonalSettings && publicMode === "party") {
+    return <PartyExperience />;
+  }
+  if (visitorEntryComplete && seasonalSettings && publicMode === "halloween") {
     return <HalloweenScreen settings={seasonalSettings} />;
   }
 

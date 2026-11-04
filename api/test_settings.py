@@ -57,7 +57,7 @@ def test_schema_three_upgrade_preserves_existing_data_and_adds_only_missing_defa
         database.execute("INSERT INTO admin_sessions VALUES ('hash', 'version', 1, 2)")
         database.execute('PRAGMA user_version=3')
     initialize(database)
-    assert database.execute('PRAGMA user_version').fetchone()[0] == 6
+    assert database.execute('PRAGMA user_version').fetchone()[0] == 7
     rows = dict(database.execute('SELECT key, value FROM settings'))
     assert rows['halloween_enabled'] == 'true' and rows['halloween_title'] == 'متن قبلی'
     assert set(DEFAULTS) <= rows.keys()
@@ -103,3 +103,33 @@ def test_corrupted_settings_fail_closed(configured, tmp_path, key):
             connection.execute("DELETE FROM settings WHERE key=?", (key,))
         connection.close()
         assert client.get('/api/settings').status_code == 503
+
+
+def test_party_mode_is_exclusive_authenticated_and_persistent(configured, tmp_path):
+    path = tmp_path / 'modes.sqlite3'
+    origin = 'https://settings.example.test'
+    with TestClient(create_app(database_path=path), base_url=origin) as client:
+        assert client.get('/api/settings').json()['party_enabled'] is False
+        assert client.patch('/api/admin/settings', json={'party_enabled': True}).status_code == 401
+        challenge = client.get('/api/admin/auth/csrf').json()['csrf_token']
+        assert client.post('/api/admin/auth/login', json={'password': 'Settings-Example!42'}, headers={'Origin': origin, 'X-CSRF-Token': challenge}).status_code == 200
+        headers = {'Origin': origin, 'X-CSRF-Token': client.get('/api/admin/auth/csrf').json()['csrf_token']}
+        assert client.patch('/api/admin/settings', json={'party_enabled': True}, headers={'Origin': origin}).status_code == 403
+        assert client.patch('/api/admin/settings', json={'party_enabled': True}, headers={**headers, 'Origin': 'https://wrong.test'}).status_code == 403
+        assert client.patch('/api/admin/settings', json={'halloween_enabled': True}, headers=headers).status_code == 200
+        result = client.patch('/api/admin/settings', json={'party_enabled': True}, headers=headers)
+        assert result.status_code == 200
+        assert result.json()['party_enabled'] is True and result.json()['halloween_enabled'] is False
+        before = client.get('/api/settings').json()
+        for payload in ({'party_enabled': True, 'halloween_enabled': True}, {'party_enabled': 'true'}):
+            assert client.patch('/api/admin/settings', json=payload, headers=headers).status_code == 422
+        assert client.get('/api/settings').json() == before
+    with TestClient(create_app(database_path=path), base_url=origin) as client:
+        assert client.get('/api/settings').json()['party_enabled'] is True
+        challenge = client.get('/api/admin/auth/csrf').json()['csrf_token']
+        client.post('/api/admin/auth/login', json={'password': 'Settings-Example!42'}, headers={'Origin': origin, 'X-CSRF-Token': challenge})
+        headers = {'Origin': origin, 'X-CSRF-Token': client.get('/api/admin/auth/csrf').json()['csrf_token']}
+        result = client.patch('/api/admin/settings', json={'halloween_enabled': True}, headers=headers)
+        assert result.json()['party_enabled'] is False and result.json()['halloween_enabled'] is True
+        result = client.patch('/api/admin/settings', json={'halloween_enabled': False}, headers=headers)
+        assert result.json()['party_enabled'] is False and result.json()['halloween_enabled'] is False

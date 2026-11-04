@@ -17,8 +17,9 @@ def test_startup_seeds_and_catalog_preserves_current_data(tmp_path):
         assert response.status_code == 200
         assert response.headers['cache-control'] == 'no-store'
         result = response.json()
-        assert result['moods'] == expected['moods']
-        assert len(result['activities']) == len(expected['activities'])
+        assert result['moods'][:2] == expected['moods'][:2]
+        assert result['moods'][2]['activities'] == expected['moods'][2]['activities'] + ['horse-riding', 'escape-room', 'laser-tag']
+        assert len(result['activities']) == len(expected['activities']) + 3
         for index, (actual, original) in enumerate(zip(result['activities'], expected['activities'])):
             assert {key: actual[key] for key in original} == original
             assert actual['sortOrder'] == index
@@ -31,7 +32,7 @@ def test_startup_seeds_and_catalog_preserves_current_data(tmp_path):
 def test_restarts_preserve_edits_memberships_order_and_disabled_state(tmp_path):
     path = tmp_path / 'catalog.sqlite3'
     with TestClient(create_app(database_path=path)) as client:
-        assert len(client.get('/api/catalog').json()['activities']) == 10
+        assert len(client.get('/api/catalog').json()['activities']) == 13
     connection = connect_database(path)
     with connection:
         connection.execute("UPDATE activities SET title='عنوان تازه', description='توضیح تازه', suggestion='پیشنهاد تازه', icon='museum', sort_order=-1 WHERE id='cafe'")
@@ -41,7 +42,7 @@ def test_restarts_preserve_edits_memberships_order_and_disabled_state(tmp_path):
     for _ in range(2):
         with TestClient(create_app(database_path=path)) as client:
             result = client.get('/api/catalog').json()
-            assert len(result['activities']) == 9
+            assert len(result['activities']) == 12
             cafe = result['activities'][0]
             assert cafe['id'] == 'cafe' and cafe['title'] == 'عنوان تازه'
             assert cafe['description'] == 'توضیح تازه' and cafe['suggestion'] == 'پیشنهاد تازه'
@@ -49,14 +50,14 @@ def test_restarts_preserve_edits_memberships_order_and_disabled_state(tmp_path):
             assert all('cinema' not in mood['activities'] for mood in result['moods'])
             assert 'cafe' not in next(mood['activities'] for mood in result['moods'] if mood['id'] == 'calm')
     connection = sqlite3.connect(path)
-    assert connection.execute('SELECT count(*) FROM activities').fetchone()[0] == 10
+    assert connection.execute('SELECT count(*) FROM activities').fetchone()[0] == 13
     connection.close()
 
 
 def test_startup_rejects_newer_schema_without_replacing_data(tmp_path):
     path = tmp_path / 'newer.sqlite3'
     connection = sqlite3.connect(path)
-    connection.execute('PRAGMA user_version=7')
+    connection.execute('PRAGMA user_version=8')
     connection.execute('CREATE TABLE keep (value TEXT)')
     connection.execute("INSERT INTO keep VALUES ('original')")
     connection.commit()
@@ -65,7 +66,7 @@ def test_startup_rejects_newer_schema_without_replacing_data(tmp_path):
         with TestClient(create_app(database_path=path)):
             pass
     connection = sqlite3.connect(path)
-    assert connection.execute('PRAGMA user_version').fetchone()[0] == 7
+    assert connection.execute('PRAGMA user_version').fetchone()[0] == 8
     assert connection.execute('SELECT value FROM keep').fetchone()[0] == 'original'
     connection.close()
 

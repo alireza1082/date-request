@@ -75,7 +75,7 @@ def test_create_edit_live_catalog_and_telegram_use_persisted_data(admin):
     client, headers, _, calls = admin
     response = client.post('/api/admin/activities', json=activity(), headers=headers)
     assert response.status_code == 201
-    assert response.json()['sortOrder'] == 10
+    assert response.json()['sortOrder'] == 13
     assert response.json()['emoji'] == '☕'
     changes = {'title': 'کتاب و یک قرار تازه', 'wheelLabel': 'کتاب تازه', 'description': 'توضیح تازه', 'suggestion': 'برای هم یه کتاب انتخاب کنین.', 'icon': 'bookshop', 'color': '#e3a280', 'moods': ['outdoor', 'surprise']}
     # surprise already has ten active options; a rejected patch changes nothing.
@@ -119,16 +119,16 @@ def test_archive_restore_reserved_id_and_restart_persistence(admin):
     assert client.delete('/api/admin/activities/new-date', headers=headers).status_code == 204
     archived = client.get('/api/admin/activities/new-date').json()
     assert archived['archived'] is True and archived['enabled'] is False
-    assert len(client.get('/api/admin/activities').json()['activities']) == 11
-    assert len(catalog(client)['activities']) == 10
+    assert len(client.get('/api/admin/activities').json()['activities']) == 14
+    assert len(catalog(client)['activities']) == 13
     assert client.post('/api/admin/activities', json=activity(), headers=headers).status_code == 409
     assert client.patch('/api/admin/activities/new-date', json={'enabled': True}, headers=headers).status_code == 409
     with TestClient(create_app(database_path=path), base_url=ORIGIN) as other:
         other.cookies.update(client.cookies)
-        assert len(catalog(other)['activities']) == 10
+        assert len(catalog(other)['activities']) == 13
         assert other.get('/api/admin/activities/new-date').json()['archived'] is True
     assert client.patch('/api/admin/activities/new-date', json={'archived': False, 'enabled': True}, headers=headers).status_code == 200
-    assert len(catalog(client)['activities']) == 11
+    assert len(catalog(client)['activities']) == 14
 
 
 def test_reorder_requires_complete_unique_nonarchived_set(admin):
@@ -143,7 +143,7 @@ def test_reorder_requires_complete_unique_nonarchived_set(admin):
     response = client.post('/api/admin/activities/reorder', json={'ids': reordered}, headers=headers)
     assert response.status_code == 200
     assert [item['id'] for item in response.json()['activities']] == reordered
-    assert [item['sortOrder'] for item in response.json()['activities']] == list(range(10))
+    assert [item['sortOrder'] for item in response.json()['activities']] == list(range(13))
     assert [item['id'] for item in catalog(client)['activities']] == [item for item in reordered if item != 'cafe']
 
 
@@ -190,7 +190,7 @@ def test_sql_failure_rolls_back_insert_and_invalid_public_state_has_no_fallback(
     connection.close()
     assert client.post('/api/admin/activities', json=activity(id='reject-me'), headers=headers).status_code == 409
     assert client.get('/api/admin/activities/reject-me').status_code == 404
-    assert len(catalog(client)['activities']) == 10
+    assert len(catalog(client)['activities']) == 13
     connection = sqlite3.connect(path)
     with connection:
         connection.execute('UPDATE activities SET enabled=0')
@@ -203,7 +203,7 @@ def test_unknown_records_and_draft_limit(admin):
     assert client.get('/api/admin/activities/missing').status_code == 404
     assert client.patch('/api/admin/activities/missing', json={'title': 'تازه'}, headers=headers).status_code == 404
     assert client.delete('/api/admin/activities/missing', headers=headers).status_code == 404
-    for index in range(30):
+    for index in range(27):
         assert client.post('/api/admin/activities', json=activity(id=f'draft-{index}', enabled=False), headers=headers).status_code == 201
     assert client.post('/api/admin/activities', json=activity(id='one-too-many', enabled=False), headers=headers).status_code == 409
     assert len(client.get('/api/admin/activities').json()['activities']) == 40

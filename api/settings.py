@@ -12,6 +12,13 @@ from api.auth import require_admin, require_admin_mutation
 class SeasonalSettings(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     halloween_enabled: bool
+    party_enabled: bool
+
+    @model_validator(mode="after")
+    def exclusive_modes(self):
+        if self.party_enabled and self.halloween_enabled:
+            raise ValueError("Only one special mode may be active")
+        return self
     halloween_title: Annotated[str, Field(min_length=1, max_length=80)]
     halloween_subtitle: Annotated[str, Field(min_length=1, max_length=240)]
     halloween_cta: Annotated[str, Field(min_length=1, max_length=60)]
@@ -34,6 +41,7 @@ class SeasonalSettings(BaseModel):
 
 class SettingsPatch(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
+    party_enabled: bool | None = None
     halloween_enabled: bool | None = None
     halloween_title: str | None = None
     halloween_subtitle: str | None = None
@@ -49,10 +57,11 @@ class SettingsPatch(BaseModel):
 
 
 def read_settings(database):
-    rows = dict(database.execute("SELECT key, value FROM settings WHERE key IN ('halloween_enabled','halloween_title','halloween_subtitle','halloween_cta','halloween_note')").fetchall())
+    rows = dict(database.execute("SELECT key, value FROM settings WHERE key IN ('party_enabled','halloween_enabled','halloween_title','halloween_subtitle','halloween_cta','halloween_note')").fetchall())
     result = rows
-    if result.get('halloween_enabled') in ('true', 'false'):
-        result['halloween_enabled'] = result['halloween_enabled'] == 'true'
+    for key in ('party_enabled', 'halloween_enabled'):
+        if result.get(key) in ('true', 'false'):
+            result[key] = result[key] == 'true'
     return SeasonalSettings.model_validate(result)
 
 
@@ -79,7 +88,14 @@ def install_settings_routes(app):
         try:
             with database:
                 database.execute('BEGIN IMMEDIATE')
-                merged = {**read_settings(database).model_dump(), **data.model_dump(exclude_unset=True)}
+                patch = data.model_dump(exclude_unset=True)
+                if patch.get('party_enabled') and patch.get('halloween_enabled'):
+                    raise HTTPException(422, 'Choose one special mode.')
+                if patch.get('party_enabled'):
+                    patch['halloween_enabled'] = False
+                if patch.get('halloween_enabled'):
+                    patch['party_enabled'] = False
+                merged = {**read_settings(database).model_dump(), **patch}
                 try:
                     settings = SeasonalSettings.model_validate(merged)
                 except ValidationError:

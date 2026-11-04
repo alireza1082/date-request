@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { SeasonalSettings } from "../../data/seasonal-settings";
+import { resolvePublicMode, type SeasonalSettings } from "../../data/seasonal-settings";
 import { HalloweenInvitationCard } from "../halloween/HalloweenScreen";
 import { AdminApiError, adminRequest, getAdminCsrf } from "./admin-api";
 interface TelegramDiagnostics {
@@ -19,7 +19,7 @@ interface TelegramDiagnostics {
   readonly read_by_recipient: null;
   readonly delivery_semantics: string;
 }
-const emptySettings: SeasonalSettings = { halloween_enabled: false, halloween_title: "", halloween_subtitle: "", halloween_cta: "", halloween_note: "" };
+const emptySettings: SeasonalSettings = { halloween_enabled: false, party_enabled: false, halloween_title: "", halloween_subtitle: "", halloween_cta: "", halloween_note: "" };
 const faNumber = new Intl.NumberFormat("fa-IR");
 
 export function AdminSettings() {
@@ -53,7 +53,7 @@ export function AdminSettings() {
 
   const dirty = JSON.stringify(settings) !== saved;
   const update = <K extends keyof SeasonalSettings>(key: K, value: SeasonalSettings[K]) => {
-    setSettings((current) => ({ ...current, [key]: value })); setNotice("");
+    setSettings((current) => ({ ...current, ...(value === true && key === "party_enabled" ? { halloween_enabled: false } : {}), ...(value === true && key === "halloween_enabled" ? { party_enabled: false } : {}), [key]: value })); setNotice("");
   };
   const saveSettings = async () => {
     if (!dirty || saving) return;
@@ -88,6 +88,12 @@ export function AdminSettings() {
   return <div className="admin-settings-page">
     <section className="admin-settings-intro"><p className="admin-kicker">تنظیم تجربهٔ بازدیدکننده</p><h2>جزئیات حال‌وهوای چرخ</h2><p>محتوا پس از ذخیره از API خوانده می‌شه و به build تازه‌ای نیاز نداره.</p></section>
     {error && <p className="admin-alert" role="alert">{error}</p>}{notice && <p className="admin-success" role="status">{notice}</p>}
+    <section className="admin-settings-card" aria-labelledby="party-settings-title">
+      <h3 id="party-settings-title">حالت شب دونفره</h3>
+      <p>تجربهٔ فعال: {({ normal: "چرخ قرار", halloween: "هالووین", party: "شب دونفره" })[resolvePublicMode(settings)]}. فعال‌کردن هر حالت ویژه، دیگری را خاموش می‌کند.</p>
+      <label className="admin-toggle"><input type="checkbox" aria-label="حالت شب دونفره" checked={settings.party_enabled ?? false} onChange={event => update("party_enabled", event.target.checked)} /><span aria-hidden="true" /><strong>{settings.party_enabled ? "روشن" : "خاموش"}</strong></label>
+      <p>شش سورپرایز با چرخِ رمزآلود و برنامهٔ مهمانی دونفره؛ پس از تغییر، ذخیرهٔ تنظیمات را بزنید.</p>
+    </section>
     <section className="admin-settings-card" aria-labelledby="halloween-settings-title">
       <div className="admin-settings-card-head"><div><p className="admin-kicker">پیشنهاد فصلی</p><h3 id="halloween-settings-title">شب هالووین</h3></div><label className="admin-toggle"><input type="checkbox" checked={settings.halloween_enabled} onChange={(event) => update("halloween_enabled", event.target.checked)} aria-label="فعال‌کردن تجربهٔ هالووین" /><span aria-hidden="true" /><strong>{settings.halloween_enabled ? "روشن" : "خاموش"}</strong></label></div>
       <p className="admin-settings-explanation">با خاموش‌بودن، این صفحه به بازدیدکننده نمایش داده نمی‌شه. تغییرهای ذخیره‌شده برای ورودی‌های بعدی فعال می‌شن.</p>

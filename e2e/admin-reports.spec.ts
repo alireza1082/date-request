@@ -5,6 +5,7 @@ test("admin dashboard, history filters, seasonal settings, and Telegram diagnost
   await page.setViewportSize({ width: 1440, height: 1000 });
   let authenticated = false;
   let savedHalloween = false;
+  let savedParty = false;
   let validation: "not_checked" | "valid" = "not_checked";
   let telegramAccepted = 0;
   let historyCleared = false;
@@ -22,7 +23,7 @@ test("admin dashboard, history filters, seasonal settings, and Telegram diagnost
     invitation_spins: historyCleared ? 0 : 3,
     telegram: { not_sent: historyCleared ? 0 : 10, attempted: 0, accepted: telegramAccepted, failed: 0 },
   });
-  const settings = () => ({ halloween_enabled: savedHalloween, halloween_title: "یه شب متفاوت در راهه...",
+  const settings = () => ({ party_enabled: savedParty, halloween_enabled: savedHalloween, halloween_title: "یه شب متفاوت در راهه...",
     halloween_subtitle: "لباس مخصوصتو آماده کن؛ قراره یه شب قشنگ بسازیم.", halloween_cta: "آماده‌ام، بزن بریم!", halloween_note: "با حال‌وهوای پاییز." });
   const diagnostic = () => ({ api_operational: true, configured: true, bot_token_configured: true,
     destination_configured: true, bot_validation: validation, bot_validated_at: validation === "valid" ? "2026-10-31T08:30:00Z" : null,
@@ -55,7 +56,10 @@ test("admin dashboard, history filters, seasonal settings, and Telegram diagnost
   await page.route("**/api/admin/settings", async (route) => {
     if (route.request().method() === "PATCH") {
       expect(route.request().headers()["x-csrf-token"]).toBe("c".repeat(64));
-      savedHalloween = (route.request().postDataJSON() as { halloween_enabled: boolean }).halloween_enabled;
+      const payload = route.request().postDataJSON() as { halloween_enabled: boolean; party_enabled: boolean };
+      expect(payload.halloween_enabled && payload.party_enabled).toBe(false);
+      savedHalloween = payload.halloween_enabled;
+      savedParty = payload.party_enabled;
     }
     await route.fulfill({ json: settings() });
   });
@@ -92,6 +96,24 @@ test("admin dashboard, history filters, seasonal settings, and Telegram diagnost
   await expect(page.locator(".admin-halloween-preview")).toContainText("لباس مخصوصتو آماده کن");
   await page.getByRole("button", { name: "ذخیرهٔ تنظیمات" }).click();
   await expect(page.getByRole("status").filter({ hasText: "تنظیمات ذخیره شد" })).toBeVisible();
+  await page.getByRole("checkbox", { name: "حالت شب دونفره", exact: true }).check();
+  await expect(page.getByLabel("فعال‌کردن تجربهٔ هالووین")).not.toBeChecked();
+  await page.getByRole("button", { name: "ذخیرهٔ تنظیمات" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "تنظیمات ذخیره شد" })).toBeVisible();
+  expect(savedParty).toBe(true);
+  expect(savedHalloween).toBe(false);
+  await expect(page.getByText(/تجربهٔ فعال: شب دونفره/)).toBeVisible();
+  for (const width of [375, 430, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `test-results/admin-party-settings-${width}.png`, fullPage: true });
+  }
+  await page.getByLabel("فعال‌کردن تجربهٔ هالووین").check();
+  await expect(page.getByRole("checkbox", { name: "حالت شب دونفره", exact: true })).not.toBeChecked();
+  await page.getByRole("button", { name: "ذخیرهٔ تنظیمات" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "تنظیمات ذخیره شد" })).toBeVisible();
+  expect(savedParty).toBe(false);
+  await page.setViewportSize({ width: 375, height: 812 });
   await page.screenshot({ path: "test-results/admin-settings-mobile.png", fullPage: true });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 

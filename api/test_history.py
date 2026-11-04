@@ -143,10 +143,10 @@ def test_schema_five_migration_preserves_existing_rows_and_rejects_newer(tmp_pat
         database.execute('ALTER TABLE spins DROP COLUMN payload_hash')
         database.execute('PRAGMA user_version=4')
     initialize(database)
-    assert database.execute('PRAGMA user_version').fetchone()[0] == 6
+    assert database.execute('PRAGMA user_version').fetchone()[0] == 7
     assert database.execute("SELECT activity_title, telegram_status FROM spins WHERE id='old'").fetchone() == ('عنوان تاریخی', 'not_sent')
     with database:
-        database.execute('PRAGMA user_version=7')
+        database.execute('PRAGMA user_version=8')
     with pytest.raises(RuntimeError, match='newer'):
         initialize(database)
     assert database.execute("SELECT activity_title FROM spins WHERE id='old'").fetchone()[0] == 'عنوان تاریخی'

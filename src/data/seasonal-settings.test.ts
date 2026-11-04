@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchSeasonalSettings, parseSeasonalSettings, SeasonalSettingsError } from "./seasonal-settings";
+import { fetchSeasonalSettings, parseSeasonalSettings, SeasonalSettingsError, resolvePublicMode } from "./seasonal-settings";
 
 const settings = {
   halloween_enabled: true,
+  party_enabled: false,
   halloween_title: "امشب یه شب معمولی نیست…",
   halloween_subtitle: "لباس هالووینتو آماده کن؛ یه شب متفاوت در راهه.",
   halloween_cta: "آماده‌ام، بزن بریم!",
@@ -14,6 +15,16 @@ describe("public seasonal settings", () => {
 
   it("accepts safe custom copy and keeps the persisted toggle", () => {
     expect(parseSeasonalSettings(settings)).toEqual(settings);
+  });
+
+  it("resolves one public mode and rejects conflicting configuration", () => {
+    expect(resolvePublicMode(settings)).toBe("halloween");
+    expect(resolvePublicMode({ halloween_enabled: false, party_enabled: true })).toBe("party");
+    expect(resolvePublicMode({ halloween_enabled: false, party_enabled: false })).toBe("normal");
+    expect(() => parseSeasonalSettings({ ...settings, party_enabled: true })).toThrow(SeasonalSettingsError);
+    const legacy = { ...settings };
+    Reflect.deleteProperty(legacy, "party_enabled");
+    expect(parseSeasonalSettings(legacy).party_enabled).toBe(false);
   });
 
   it.each([

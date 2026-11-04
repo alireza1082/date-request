@@ -49,7 +49,7 @@ export function VisitorDetails({ onContinue }: VisitorDetailsProps) {
           />
 
           <p id="visitor-privacy-copy" className="visitor-privacy-note">
-            نتیجهٔ چرخش و نامی که وارد می‌کنی برای صاحب سایت ثبت می‌شه.
+            نتیجهٔ چرخِ معمولی و نامی که وارد می‌کنی برای صاحب سایت ثبت می‌شه. تجربه‌های مناسبتی ثبت نتیجه ندارن.
           </p>
 
           <button className="button button-primary visitor-continue" type="submit">بریم سراغ سورپرایز <span aria-hidden="true">←</span></button>

@@ -1,6 +1,7 @@
 import { readPublicJson } from "./public-read";
 export interface SeasonalSettings {
   readonly halloween_enabled: boolean;
+  readonly party_enabled: boolean;
   readonly halloween_title: string;
   readonly halloween_subtitle: string;
   readonly halloween_cta: string;
@@ -26,6 +27,8 @@ export function parseSeasonalSettings(value: unknown): SeasonalSettings {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new SeasonalSettingsError();
   const record = value as Record<string, unknown>;
   if (typeof record.halloween_enabled !== "boolean") throw new SeasonalSettingsError("پاسخ تنظیمات تجربهٔ فصلی معتبر نیست.");
+  if (record.party_enabled !== undefined && typeof record.party_enabled !== "boolean") throw new SeasonalSettingsError();
+  if (record.party_enabled === true && record.halloween_enabled === true) throw new SeasonalSettingsError();
   for (const [field, limit] of Object.entries(textLimits) as [keyof typeof textLimits, number][]) {
     const text = record[field];
     if (typeof text !== "string" || text.length > limit || unsafeText.test(text)
@@ -37,6 +40,7 @@ export function parseSeasonalSettings(value: unknown): SeasonalSettings {
     }
   }
   return {
+    party_enabled: record.party_enabled === true,
     halloween_enabled: record.halloween_enabled,
     halloween_title: record.halloween_title as string,
     halloween_subtitle: record.halloween_subtitle as string,
@@ -52,4 +56,8 @@ export async function fetchSeasonalSettings(): Promise<SeasonalSettings> {
     if (error instanceof SeasonalSettingsError) throw error;
     throw new SeasonalSettingsError("ارتباط با تنظیمات سورپرایز برقرار نشد؛ دوباره تلاش کن.");
   }
+}
+
+export function resolvePublicMode(settings: Pick<SeasonalSettings, "party_enabled" | "halloween_enabled">): "normal" | "halloween" | "party" {
+  return settings.party_enabled ? "party" : settings.halloween_enabled ? "halloween" : "normal";
 }
