@@ -11,7 +11,7 @@ test-results/
 .venv/
 __pycache__/
 .pytest_cache/
-data/
+/data/
 *.sqlite3
 *.sqlite3-wal
 *.sqlite3-shm
